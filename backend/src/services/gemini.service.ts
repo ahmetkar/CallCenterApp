@@ -25,7 +25,6 @@ Kurallar:
 `;
 
 
-
 export class GeminiService {
   private chat = ai.chats.create({
     model: 'gemini-3.5-flash-lite',

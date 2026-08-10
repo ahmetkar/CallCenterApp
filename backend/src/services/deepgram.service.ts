@@ -2,8 +2,8 @@ import WebSocket from 'ws';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { spawn } from 'child_process';
-import ffmpegPath from 'ffmpeg-static';
+import { convertToPCM } from '../helpers/pcm.helper';
+
 
 export class DeepgramService {
   async transcribeWebm(webmBuffer: Buffer): Promise<string> {
@@ -16,7 +16,7 @@ export class DeepgramService {
 
     await fs.writeFile(input, webmBuffer);
 
-    await this.convertToPCM(input, output);
+    await convertToPCM(input, output);
 
     const pcm = await fs.readFile(output);
 
@@ -27,32 +27,7 @@ export class DeepgramService {
     return transcript;
   }
 
-  private convertToPCM(
-    input: string,
-    output: string
-  ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const ffmpeg = spawn(ffmpegPath as string, [
-        '-y',
-        '-i',
-        input,
-        '-ac',
-        '1',
-        '-ar',
-        '16000',
-        '-f',
-        's16le',
-        output,
-      ]);
 
-      ffmpeg.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`FFmpeg exited: ${code}`));
-      });
-
-      ffmpeg.on('error', reject);
-    });
-  }
 
   private sendToDeepgram(
     pcm: Buffer

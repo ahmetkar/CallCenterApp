@@ -26,9 +26,9 @@ export class TtsService {
       audioConfig: {
         audioEncoding: 'LINEAR16',
         sampleRateHertz: 16000,
-        speakingRate: 1.15,
-        pitch: 0.5,
-        volumeGainDb: 2,
+        speakingRate: 1.4,
+        pitch: 1.8,
+        volumeGainDb: 2.5,
       },
     });
 
