@@ -28,7 +28,7 @@ Kurallar:
 
 export class GeminiService {
   private chat = ai.chats.create({
-    model: 'gemini-3.5-flash',
+    model: 'gemini-3.5-flash-lite',
     config: {
       systemInstruction:systemPrompt,
       tools: [
