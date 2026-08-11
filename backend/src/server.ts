@@ -4,24 +4,28 @@ import http from 'http';
 import { setupWebSocket } from './websocket';
 import dotenv from 'dotenv';
 
-dotenv.config();
+export async function startServer() {
 
-const app = express();
+  dotenv.config();
 
-app.use(express.json());
+  const app = express();
 
-app.get('/', (_, res) => {
-  res.json({
-    status: 'Voice Agent Backend',
+  app.use(express.json());
+
+  app.get('/', (_, res) => {
+    res.json({
+      status: 'Voice Agent Backend',
+    });
   });
-});
 
-const server = http.createServer(app);
+  const server = http.createServer(app);
 
-setupWebSocket(server);
+  setupWebSocket(server);
 
-const PORT = process.env.PORT || 4000;
+  const PORT = process.env.PORT || 4000;
 
-server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+  server.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+}

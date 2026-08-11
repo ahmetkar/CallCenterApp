@@ -1,0 +1,19 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: voiceapp-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: VoiceShop
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      TZ: Europe/Istanbul
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

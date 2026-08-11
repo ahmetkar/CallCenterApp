@@ -1,19 +1,46 @@
-import { Type, FunctionDeclaration } from '@google/genai';
+import {
+  Type,
+  FunctionDeclaration,
+} from '@google/genai';
+
+import { ProductService } from './product.service';
+import { OrderService } from './order.service';
+import { CargoService } from './cargo.service';
+
+const productService = new ProductService();
+const orderService = new OrderService();
+const cargoService = new CargoService();
 
 export const toolDefinitions: FunctionDeclaration[] = [
   {
+    name: 'searchProducts',
+    description:
+      'Ürün ara ve fiyat, para birimi ile stok bilgisini getir.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        productName: {
+          type: Type.STRING,
+          description: 'Aranacak ürün adı',
+        },
+      },
+      required: ['productName'],
+    },
+  },
+  {
     name: 'createOrder',
-    description: 'Yeni bir sipariş oluşturur',
+    description:
+      'Yeni sipariş oluşturur ve otomatik kargo kaydı açar.',
     parameters: {
       type: Type.OBJECT,
       properties: {
         product: {
           type: Type.STRING,
-          description: 'Sipariş edilecek ürün adı',
+          description: 'Ürün adı',
         },
         quantity: {
           type: Type.NUMBER,
-          description: 'Ürün adedi',
+          description: 'Sipariş adedi',
         },
         customerName: {
           type: Type.STRING,
@@ -21,7 +48,7 @@ export const toolDefinitions: FunctionDeclaration[] = [
         },
         address: {
           type: Type.STRING,
-          description: 'Müşterinin sipariş adresi',
+          description: 'Teslimat adresi',
         },
       },
       required: [
@@ -34,12 +61,13 @@ export const toolDefinitions: FunctionDeclaration[] = [
   },
   {
     name: 'checkOrderStatus',
-    description: 'Sipariş durumunu kontrol eder',
+    description:
+      'Sipariş durumunu getirir.',
     parameters: {
       type: Type.OBJECT,
       properties: {
         orderId: {
-          type: Type.STRING,
+          type: Type.NUMBER,
           description: 'Sipariş numarası',
         },
       },
@@ -47,80 +75,189 @@ export const toolDefinitions: FunctionDeclaration[] = [
     },
   },
   {
-    name: 'searchProducts',
-    description: 'Ürün bilgisi ve stok durumunu getir',
+    name: 'checkCargoStatus',
+    description:
+      'Sipariş numarasına göre kargo durumunu getirir.',
     parameters: {
       type: Type.OBJECT,
       properties: {
-        productName: {
-          type: Type.STRING,
+        orderId: {
+          type: Type.NUMBER,
+          description: 'Sipariş numarası',
         },
       },
-      required: ['productName'],
+      required: ['orderId'],
+    },
+  },
+  {
+    name: 'checkCargoByTrackingNumber',
+    description:
+      'Takip numarasına göre kargo durumunu getirir.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        trackingNumber: {
+          type: Type.STRING,
+          description: 'Kargo takip numarası',
+        },
+      },
+      required: ['trackingNumber'],
     },
   },
 ];
 
-export interface CreateOrderArgs {
-  product: string;
-  quantity: number;
-  customerName: string;
-  address: string;
-}
-
-export interface CheckOrderStatusArgs {
-  orderId: string;
-}
-
-export interface SearchProductsArgs {
-  productName: string;
-}
-
 export async function executeTool(
   name: string,
-  args: unknown
+  args: Record<string, any>
 ): Promise<any> {
-  console.log(`[TOOL CALL] ${name}`);
-  console.log(args);
+  try {
+    switch (name) {
+      case 'searchProducts': {
+        const products =
+          await productService.searchProducts(
+            args.productName
+          );
 
-  switch (name) {
-    case 'createOrder': {
-      const orderArgs = args as CreateOrderArgs;
+        if (products.length === 0) {
+          return {
+            success: false,
+            errorCode:
+              'PRODUCT_NOT_FOUND',
+            message:
+              'Aradığınız ürün bulunamadı.',
+          };
+        }
 
-      const orderId = 'ORDER-' + Date.now();
+        return {
+          success: true,
+          products,
+        };
+      }
 
+      case 'createOrder': {
+        return await orderService.createOrder({
+          productName:
+            args.product,
+          quantity:
+            Number(args.quantity),
+          customerName:
+            args.customerName,
+          address: args.address,
+        });
+      }
+
+      case 'checkOrderStatus': {
+        return {
+          success: true,
+          order:
+            await orderService.checkOrderStatus(
+              Number(args.orderId)
+            ),
+        };
+      }
+
+      case 'checkCargoStatus': {
+        return {
+          success: true,
+          cargo:
+            await cargoService.checkCargoStatus(
+              Number(args.orderId)
+            ),
+        };
+      }
+
+      case 'checkCargoByTrackingNumber': {
+        return {
+          success: true,
+          cargo:
+            await cargoService.checkByTrackingNumber(
+              args.trackingNumber
+            ),
+        };
+      }
+
+      default:
+        return {
+          success: false,
+          errorCode:
+            'UNKNOWN_TOOL',
+          message:
+            'İstenen işlem desteklenmiyor.',
+        };
+    }
+  } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : 'Bilinmeyen hata';
+
+    if (
+      message.includes(
+        'Ürün bulunamadı'
+      )
+    ) {
       return {
-        success: true,
-        orderId,
-        message: `${orderArgs.customerName} adına ${orderArgs.quantity} adet ${orderArgs.product} siparişi oluşturuldu.`,
+        success: false,
+        errorCode:
+          'PRODUCT_NOT_FOUND',
+        message:
+          'Aradığınız ürün bulunamadı.',
       };
     }
 
-    case 'checkOrderStatus': {
-      const statusArgs =
-        args as CheckOrderStatusArgs;
-
+    if (
+      message.includes(
+        'Yetersiz stok'
+      )
+    ) {
       return {
-        success: true,
-        orderId: statusArgs.orderId,
-        status: 'Hazırlanıyor',
-        estimatedDelivery: 'Yarın 14:00',
+        success: false,
+        errorCode:
+          'OUT_OF_STOCK',
+        message:
+          'İstenen ürün için yeterli stok bulunmuyor.',
       };
     }
 
-    case 'searchProducts': {
-      const productArgs =
-        args as SearchProductsArgs;
-
+    if (
+      message.includes(
+        'Sipariş bulunamadı'
+      )
+    ) {
       return {
-        productName: productArgs.productName,
-        stock: 25,
-        price: 300,
-        currency: 'TRY',
+        success: false,
+        errorCode:
+          'ORDER_NOT_FOUND',
+        message:
+          'Belirtilen sipariş bulunamadı.',
       };
     }
 
-    default:
-      throw new Error(`Unknown tool: ${name}`);
+    if (
+      message.includes(
+        'Kargo bulunamadı'
+      )
+    ) {
+      return {
+        success: false,
+        errorCode:
+          'CARGO_NOT_FOUND',
+        message:
+          'Belirtilen kargo kaydı bulunamadı.',
+      };
+    }
+
+    console.error(
+      'Tool error:',
+      err
+    );
+
+    return {
+      success: false,
+      errorCode:
+        'DATABASE_ERROR',
+      message:
+        'İşlem sırasında bir veritabanı hatası oluştu. Lütfen daha sonra tekrar deneyin.',
+    };
   }
 }

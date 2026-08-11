@@ -1,66 +1,153 @@
+import { randomUUID } from 'crypto';
 import { Server as HttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
+
 import { AudioProcessor } from './helpers/audio.processor';
 import { DeepgramService } from './services/deepgram.service';
-import { GeminiService } from './services/gemini.service';
+import { SessionManager } from './services/gemini.service';
 import { TtsService } from './services/tts.service';
+
+const sessionManager = new SessionManager();
 
 export function setupWebSocket(
   server: HttpServer
 ): void {
-  const wss = new WebSocketServer({ server });
+  const wss = new WebSocketServer({
+    server,
+  });
 
   wss.on(
     'connection',
     (client: WebSocket) => {
-      console.log('New recording session');
+      console.log(
+        'New recording session'
+      );
+
+      const sessionId =
+        randomUUID();
+
+      const gemini =
+        sessionManager.getSession(
+          sessionId
+        );
 
       const audioProcessor =
         new AudioProcessor();
-      const deepgram = new DeepgramService();
-      const gemini = new GeminiService();
-      const tts = new TtsService();
+
+      const deepgram =
+        new DeepgramService();
+
+      const tts =
+        new TtsService();
+
+      client.send(
+        JSON.stringify({
+          type: 'session',
+          sessionId,
+        })
+      );
 
       client.on(
         'message',
         async (raw, isBinary) => {
           try {
-            // Float32 PCM frame
             if (isBinary) {
-                const buffer = Buffer.from(raw as Buffer);
-
-                // Buffer -> Float32Array (4096 sample)
-                const float32 = new Float32Array(
-                  buffer.buffer,
-                  buffer.byteOffset,
-                  Math.floor(buffer.byteLength / 4)
+              const buffer =
+                Buffer.from(
+                  raw as Buffer
                 );
 
-                audioProcessor.addFrame(float32);
+              const float32 =
+                new Float32Array(
+                  buffer.buffer,
+                  buffer.byteOffset,
+                  Math.floor(
+                    buffer.byteLength /
+                      4
+                  )
+                );
 
-                return;
-              }
-            const message = JSON.parse(
-              raw.toString()
-            );
+              audioProcessor.addFrame(
+                float32
+              );
 
-            if (message.type !== 'stop') return;
+              return;
+            }
 
-            // Backend'de PCM oluştur
+            const message =
+              JSON.parse(
+                raw.toString()
+              );
+
+            if (
+              message.type !==
+              'stop'
+            ) {
+              return;
+            }
+
             const pcm =
               audioProcessor.getPCMBuffer();
 
-                          console.log(
+            audioProcessor.reset();
+
+            console.log(
               'PCM size:',
               pcm.length
             );
 
-            audioProcessor.reset();
-
-            const transcript =
-              await deepgram.transcribePCM(
-                pcm
+            if (
+              pcm.length === 0
+            ) {
+              client.send(
+                JSON.stringify({
+                  type: 'assistant',
+                  text: 'Ses algılanamadı. Lütfen tekrar konuşur musunuz?',
+                })
               );
+
+              return;
+            }
+
+            let transcript =
+              '';
+
+            try {
+              transcript =
+                await deepgram.transcribePCM(
+                  pcm
+                );
+            } catch (err) {
+              console.error(
+                'Deepgram error:',
+                err
+              );
+
+              client.send(
+                JSON.stringify({
+                  type: 'assistant',
+                  text: 'Sesinizi anlayamadım. Lütfen tekrar konuşur musunuz?',
+                })
+              );
+
+              return;
+            }
+
+            if (
+              !transcript ||
+              transcript.trim()
+                .length ===
+                0
+            ) {
+              client.send(
+                JSON.stringify({
+                  type: 'assistant',
+                  text: 'Sesinizi anlayamadım. Lütfen tekrar konuşur musunuz?',
+                })
+              );
+
+              return;
+            }
 
             client.send(
               JSON.stringify({
@@ -88,7 +175,8 @@ export function setupWebSocket(
 
             for (
               let i = 0;
-              i < audioChunks.length;
+              i <
+              audioChunks.length;
               i++
             ) {
               client.send(
@@ -97,7 +185,9 @@ export function setupWebSocket(
                   audio: audioChunks[i],
                   index: i,
                   isLast:
-                    i === audioChunks.length - 1,
+                    i ===
+                    audioChunks.length -
+                      1,
                 })
               );
             }
@@ -108,22 +198,36 @@ export function setupWebSocket(
               })
             );
           } catch (err) {
-            console.error(err);
+            console.error(
+              'WebSocket error:',
+              err
+            );
 
             client.send(
               JSON.stringify({
                 type: 'assistant',
-                text: 'Bir hata oluştu.',
+                text: 'Bir hata oluştu. Lütfen tekrar deneyin.',
               })
             );
           }
         }
       );
 
-      client.on('close', () => {
-        console.log('Session closed');
-        gemini.resetConversation();
-      });
+      client.on(
+        'close',
+        () => {
+          console.log(
+            'Session closed:',
+            sessionId
+          );
+        }
+      );
     }
   );
+
+  setInterval(() => {
+    sessionManager.cleanupIdleSessions(
+      30
+    );
+  }, 5 * 60 * 1000);
 }
