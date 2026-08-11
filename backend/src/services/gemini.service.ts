@@ -55,17 +55,20 @@ Kurallar:
   - müşteri adı
   - teslimat adresi
 - Eksik bilgi varsa sadece eksik olanı sor.
+- Kullanıcı anlaşılmaz bilgiler ve saçma bilgiler verdiğinde o bilgiyi tekrar sor.
 - Daha önce verilen bilgileri tekrar sorma.
 - Ürün ve sipariş bilgilerini sadece tool'lardan al.
 - Bilgi uydurma.
 - Kısa ve doğal konuş.
 - Verilen adres bilgisinin geçerli bir adres bilgisi olup olmadığını kontrol et.
 - Sipariş oluşturmadan önce kullanıcıya aldığın bilgileri söyle ve onayını al
+- Varolan tool ların sağlandığı işlem dışında bir işlem istenirse "Bu isteğinizi gerçekleştiremem" de ve "Başka isteğiniz varmı ?" diye sor.
 - Tool kullanırken önceki verileri kullanıyorsan bunu kullanıcıya söyle ve onayını al
 - Sipariş oluşturulduktan sonra sipariş numarası ve takip numarasını kullanıcıya söyle.
 - Tool sonucu success=false ise message alanındaki bilgiyi kullanıcıya doğal Türkçe ile ilet.
 - Teknik hata detaylarını (SQL, exception, stack trace vb.) kullanıcıya gösterme.
 - Ürün bulunamazsa kullanıcıdan farklı bir ürün adı istemeyi öner ve kullanıcıya "İstediğiniz ürünü satmıyoruz" gibi cevap ver.
+- Stok adetini direk söyleme sadece kullanıcının istediği miktardan düşük mü diye kontrol et ve buna göre tekrar ürün adeti iste.
 - Stok yetersizse daha düşük adet önermeyi düşün.
 - Kargo veya sipariş bulunamazsa kullanıcıdan sipariş numarasını doğrulamasını iste.
 - Ürün listesini sayarken gereksiz karakter eklemesini yapma olabildiğince sade bir şekilde söyle.
@@ -134,19 +137,19 @@ export class GeminiService {
 
   private buildContextMessage(): string {
     return `
-Session: ${this.sessionId}
+    Session: ${this.sessionId}
 
-Konuşma durumu:
+    Konuşma durumu:
 
-Ürün: ${this.state.productName ?? 'yok'}
-Adet: ${this.state.quantity ?? 'yok'}
-Müşteri: ${this.state.customerName ?? 'yok'}
-Adres: ${this.state.address ?? 'yok'}
-Son sipariş: ${this.state.lastOrderId ?? 'yok'}
-Son takip numarası: ${this.state.lastTrackingNumber ?? 'yok'}
+    Ürün: ${this.state.productName ?? 'yok'}
+    Adet: ${this.state.quantity ?? 'yok'}
+    Müşteri: ${this.state.customerName ?? 'yok'}
+    Adres: ${this.state.address ?? 'yok'}
+    Son sipariş: ${this.state.lastOrderId ?? 'yok'}
+    Son takip numarası: ${this.state.lastTrackingNumber ?? 'yok'}
 
-Bu bilgiler mevcut konuşmada toplandı.
-Bu bilgiler varsa tekrar sorma.
+    Bu bilgiler mevcut konuşmada toplandı.
+    Bu bilgiler varsa tekrar sorma.
 `;
   }
 
