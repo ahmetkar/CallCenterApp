@@ -26,9 +26,9 @@ export class TtsService {
       audioConfig: {
         audioEncoding: 'LINEAR16',
         sampleRateHertz: 16000,
-        speakingRate: 1.4,
-        pitch: 1.8,
-        volumeGainDb: 2.5,
+        speakingRate: 1.1,
+        pitch: 0.0,
+        volumeGainDb: 0.0,
       },
     });
 
@@ -36,16 +36,29 @@ export class TtsService {
       response.audioContent as Uint8Array
     );
 
+    // Frontend WAV beklediği için WAV gönderiyoruz
     return wavBuffer.toString('base64');
   }
 
-  async synthesizeChunks(text: string): Promise<string[]> {
+  async synthesizeChunks(
+    text: string
+  ): Promise<string[]> {
     const sentences = this.splitIntoSentences(text);
+
     const chunks: string[] = [];
 
     for (const sentence of sentences) {
-      const audio = await this.synthesizeSentence(sentence);
-      chunks.push(audio);
+      try {
+        const audio =
+          await this.synthesizeSentence(sentence);
+
+        chunks.push(audio);
+      } catch (err) {
+        console.error(
+          'TTS sentence error:',
+          err
+        );
+      }
     }
 
     return chunks;

@@ -1,33 +1,15 @@
 import WebSocket from 'ws';
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
-import { convertToPCM } from '../helpers/pcm.helper';
-
 
 export class DeepgramService {
-  async transcribeWebm(webmBuffer: Buffer): Promise<string> {
-    const dir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'voice-')
-    );
+  async transcribePCM(
+    pcm: Buffer
+  ): Promise<string> {
+    if (pcm.length === 0) {
+      return '';
+    }
 
-    const input = path.join(dir, 'input.webm');
-    const output = path.join(dir, 'output.pcm');
-
-    await fs.writeFile(input, webmBuffer);
-
-    await convertToPCM(input, output);
-
-    const pcm = await fs.readFile(output);
-
-    const transcript = await this.sendToDeepgram(pcm);
-
-    await fs.rm(dir, { recursive: true, force: true });
-
-    return transcript;
+    return this.sendToDeepgram(pcm);
   }
-
-
 
   private sendToDeepgram(
     pcm: Buffer
@@ -46,17 +28,31 @@ export class DeepgramService {
 
       ws.on('open', () => {
         ws.send(pcm);
-        ws.send(JSON.stringify({ type: 'CloseStream' }));
+        ws.send(
+          JSON.stringify({
+            type: 'CloseStream',
+          })
+        );
       });
 
       ws.on('message', (data) => {
-        const msg = JSON.parse(data.toString());
+        try {
+          const msg = JSON.parse(
+            data.toString()
+          );
 
-        const text =
-          msg.channel?.alternatives?.[0]?.transcript;
+          const text =
+            msg.channel?.alternatives?.[0]
+              ?.transcript;
 
-        if (text && msg.is_final) {
-          result += text + ' ';
+          if (text && msg.is_final) {
+            result += text + ' ';
+          }
+        } catch (err) {
+          console.error(
+            'Deepgram parse error:',
+            err
+          );
         }
       });
 
