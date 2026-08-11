@@ -4,30 +4,21 @@ dotenv.config();
 import { GoogleGenAI, Content } from '@google/genai';
 import { executeTool, toolDefinitions } from './tools';
 
-
-const toFunctionOutput = (
-  result: any
-) => {
+const toFunctionOutput = (result: any) => {
   if (Array.isArray(result)) {
     return { items: result };
   }
 
-  if (
-    result === null ||
-    result === undefined
-  ) {
+  if (result === null || result === undefined) {
     return {};
   }
 
-  if (
-    typeof result !==
-    'object'
-  ) {
+  if (typeof result !== 'object') {
     return { value: result };
   }
 
   return result;
-}
+};
 
 const ai = new GoogleGenAI({
   vertexai: true,
@@ -37,6 +28,23 @@ const ai = new GoogleGenAI({
 
 const baseSystemPrompt = `
 Sen profesyonel bir Türkçe sipariş ve kargo asistanısın.
+
+Konuşmayı sen başlatırsın.
+
+İlk mesajında:
+
+- kullanıcıyı karşıla,
+- kendini sipariş asistanıı olarak tanıt,
+- ürünler hakkında bilgi verebileceğini söyle,
+- sipariş oluşturabileceğini söyle,
+- kargo durumunu sorgulayabileceğini söyle,
+- kullanıcıya ürün listesini sayıp saymamanı iste.
+
+Örnek:
+
+Merhaba, Çağrı merkezimize hoş geldiniz.
+Size ürünlerimiz hakkında bilgi verebilir, sipariş oluşturabilir ve kargo durumunuzu sorgulayabilirim.
+Ne yapmamı istediğizi söylermisiniz ?
 
 Kurallar:
 
@@ -51,19 +59,21 @@ Kurallar:
 - Ürün ve sipariş bilgilerini sadece tool'lardan al.
 - Bilgi uydurma.
 - Kısa ve doğal konuş.
+- Verilen adres bilgisinin geçerli bir adres bilgisi olup olmadığını kontrol et.
+- Sipariş oluşturmadan önce kullanıcıya aldığın bilgileri söyle ve onayını al
+- Tool kullanırken önceki verileri kullanıyorsan bunu kullanıcıya söyle ve onayını al
 - Sipariş oluşturulduktan sonra sipariş numarası ve takip numarasını kullanıcıya söyle.
 - Tool sonucu success=false ise message alanındaki bilgiyi kullanıcıya doğal Türkçe ile ilet.
 - Teknik hata detaylarını (SQL, exception, stack trace vb.) kullanıcıya gösterme.
-- Ürün bulunamazsa kullanıcıdan farklı bir ürün adı istemeyi öner.
+- Ürün bulunamazsa kullanıcıdan farklı bir ürün adı istemeyi öner ve kullanıcıya "İstediğiniz ürünü satmıyoruz" gibi cevap ver.
 - Stok yetersizse daha düşük adet önermeyi düşün.
 - Kargo veya sipariş bulunamazsa kullanıcıdan sipariş numarasını doğrulamasını iste.
+- Ürün listesini sayarken gereksiz karakter eklemesini yapma olabildiğince sade bir şekilde söyle.
 `;
 
 export interface ConversationState {
-  productId?: number;
   productName?: string;
   quantity?: number;
-  customerId?: number;
   customerName?: string;
   address?: string;
   lastOrderId?: number;
@@ -73,6 +83,7 @@ export interface ConversationState {
     | 'create_order'
     | 'order_status'
     | 'cargo_status';
+
   metadata: {
     createdAt: Date;
     updatedAt: Date;
@@ -91,7 +102,26 @@ export class GeminiService {
     },
   };
 
-  constructor(private sessionId: string) {}
+  constructor(private sessionId: string) {
+    this.history = [
+      {
+        role: 'model',
+        parts: [
+          {
+            text: baseSystemPrompt,
+          },
+        ],
+      },
+      {
+        role: 'model',
+        parts: [
+          {
+            text: this.buildContextMessage(),
+          },
+        ],
+      },
+    ];
+  }
 
   getState() {
     return this.state;
@@ -102,10 +132,8 @@ export class GeminiService {
     this.state.metadata.messageCount++;
   }
 
-  private buildSystemPrompt(): string {
+  private buildContextMessage(): string {
     return `
-${baseSystemPrompt}
-
 Session: ${this.sessionId}
 
 Konuşma durumu:
@@ -119,170 +147,271 @@ Son takip numarası: ${this.state.lastTrackingNumber ?? 'yok'}
 
 Bu bilgiler mevcut konuşmada toplandı.
 Bu bilgiler varsa tekrar sorma.
-
 `;
   }
 
-  private async generate() {
-    return ai.models.generateContent({
-      model: 'gemini-3.5-flash-lite',
-      contents: this.history,
-      config: {
-        systemInstruction: this.buildSystemPrompt(),
-        tools: [
-          {
-            functionDeclarations: toolDefinitions,
-          },
-        ],
-      },
-    });
+  private refreshContext() {
+    this.history[1] = {
+      role: 'model',
+      parts: [
+        {
+          text: this.buildContextMessage(),
+        },
+      ],
+    };
   }
 
-  private updateState(args: Record<string, any>) {
+  async startConversation(): Promise<{
+  text: string;
+}> {
+  return this.processMessage(
+    'Konuşmayı başlat ve kullanıcıyı karşıla.'
+  );
+}
+
+  private async generate(
+    retries = 3
+  ) {
+    for (let i = 0; i < retries; i++) {
+      try {
+        return await ai.models.generateContent({
+          model: 'gemini-3.5-flash-lite',
+          contents: this.history,
+          config: {
+            tools: [
+              {
+                functionDeclarations:
+                  toolDefinitions,
+              },
+            ],
+          },
+        });
+      } catch (err: any) {
+        if (
+          err?.status === 429 &&
+          i < retries - 1
+        ) {
+          const delay =
+            Math.pow(2, i) * 1000;
+
+          console.log(
+            `Gemini 429 retry in ${delay} ms`
+          );
+
+          await new Promise((r) =>
+            setTimeout(r, delay)
+          );
+
+          continue;
+        }
+
+        throw err;
+      }
+    }
+
+    throw new Error(
+      'Gemini retry failed'
+    );
+  }
+
+  private updateState(
+    args: Record<string, any>
+  ) {
     if (args.product) {
-      this.state.productName = args.product;
+      this.state.productName =
+        args.product;
     }
 
     if (args.productName) {
-      this.state.productName = args.productName;
+      this.state.productName =
+        args.productName;
     }
 
-    if (typeof args.quantity === 'number') {
-      this.state.quantity = args.quantity;
+    if (
+      typeof args.quantity ===
+      'number'
+    ) {
+      this.state.quantity =
+        args.quantity;
     }
 
     if (args.customerName) {
-      this.state.customerName = args.customerName;
+      this.state.customerName =
+        args.customerName;
     }
 
     if (args.address) {
-      this.state.address = args.address;
+      this.state.address =
+        args.address;
     }
 
     this.touch();
+    this.refreshContext();
   }
 
   private updateFromToolResult(
     toolName: string,
     result: any
   ) {
-    if (toolName === 'createOrder' && result?.success) {
-      this.state.lastOrderId = result.orderId;
-      this.state.lastTrackingNumber = result.cargoTracking;
-      this.state.lastIntent = 'create_order';
+    if (
+      toolName === 'createOrder' &&
+      result?.success
+    ) {
+      this.state.lastOrderId =
+        result.orderId;
+      this.state.lastTrackingNumber =
+        result.cargoTracking;
+      this.state.lastIntent =
+        'create_order';
     }
 
-    if (toolName === 'searchProducts') {
-      this.state.lastIntent = 'search_product';
+    if (toolName === 'searchProduct') {
+      this.state.lastIntent =
+        'search_product';
     }
 
-    if (toolName === 'checkOrderStatus') {
-      this.state.lastIntent = 'order_status';
+    if (
+      toolName ===
+      'checkOrderStatus'
+    ) {
+      this.state.lastIntent =
+        'order_status';
     }
 
-    if (toolName === 'checkCargoStatus') {
-      this.state.lastIntent = 'cargo_status';
+    if (
+      toolName ===
+      'checkCargoStatus'
+    ) {
+      this.state.lastIntent =
+        'cargo_status';
     }
 
     this.touch();
+    this.refreshContext();
   }
 
-  async processMessage(
-  text: string
-): Promise<{ text: string }> {
-  if (!text.trim()) {
-    return {
-      text: 'Sizi duyamadım. Tekrar eder misiniz?',
-    };
-  }
-
-  this.history.push({
-    role: 'user',
-    parts: [{ text }],
-  });
-
-  this.touch();
-
-  let response = await this.generate();
-
-  while (
-    response.functionCalls &&
-    response.functionCalls.length > 0
-  ) {
-    const functionCall = response.functionCalls[0];
-
-    if (!functionCall.name) {
-      throw new Error(
-        'Function call name is missing'
-      );
+    async processMessage(
+    text: string
+  ): Promise<{ text: string }> {
+    if (!text.trim()) {
+      return {
+        text: 'Sizi duyamadım. Tekrar eder misiniz?',
+      };
     }
-
-    const args = (functionCall.args || {}) as Record<
-      string,
-      any
-    >;
-
-    this.updateState(args);
-
-    const candidate = response.candidates?.[0];
-
-    if (candidate?.content) {
-      this.history.push(candidate.content);
-    }
-
-    const result = await executeTool(
-      functionCall.name,
-      args
-    );
-
-    this.updateFromToolResult(
-      functionCall.name,
-      result
-    );
-
-    const output =
-      Array.isArray(result)
-        ? { items: result }
-        : result ?? {};
 
     this.history.push({
       role: 'user',
-      parts: [
-        {
-          functionResponse: {
-            name: functionCall.name,
-            response:toFunctionOutput(output),
+      parts: [{ text }],
+    });
+
+    this.touch();
+
+    let response =
+      await this.generate();
+
+    while (
+      response.functionCalls &&
+      response.functionCalls.length > 0
+    ) {
+      const functionCall =
+        response.functionCalls[0];
+
+      if (!functionCall.name) {
+        throw new Error(
+          'Function call name is missing'
+        );
+      }
+
+      const args =
+        (functionCall.args ||
+          {}) as Record<
+          string,
+          any
+        >;
+
+      this.updateState(args);
+
+      const candidate =
+        response.candidates?.[0];
+
+      if (candidate?.content) {
+        this.history.push(
+          candidate.content
+        );
+      }
+
+      const result =
+        await executeTool(
+          functionCall.name,
+          args
+        );
+
+      this.updateFromToolResult(
+        functionCall.name,
+        result
+      );
+
+      this.history.push({
+        role: 'user',
+        parts: [
+          {
+            functionResponse: {
+              name: functionCall.name,
+              response:
+                toFunctionOutput(
+                  result
+                ),
+            },
           },
-        },
-      ],
-    });
+        ],
+      });
 
-    response = await this.generate();
+      response =
+        await this.generate();
+    }
+
+    const answer =
+      response.text ||
+      'İşlem tamamlandı. Başka nasıl yardımcı olabilirim?';
+
+    const finalCandidate =
+      response.candidates?.[0];
+
+    if (finalCandidate?.content) {
+      this.history.push(
+        finalCandidate.content
+      );
+    } else {
+      this.history.push({
+        role: 'model',
+        parts: [{ text: answer }],
+      });
+    }
+
+    return {
+      text: answer,
+    };
   }
-
-  const answer =
-    response.text ||
-    'İşlem tamamlandı. Başka nasıl yardımcı olabilirim?';
-
-  const finalCandidate =
-    response.candidates?.[0];
-
-  if (finalCandidate?.content) {
-    this.history.push(finalCandidate.content);
-  } else {
-    this.history.push({
-      role: 'model',
-      parts: [{ text: answer }],
-    });
-  }
-
-  return {
-    text: answer,
-  };
-}
 
   resetConversation() {
-    this.history = [];
+    this.history = [
+      {
+        role: 'model',
+        parts: [
+          {
+            text: baseSystemPrompt,
+          },
+        ],
+      },
+      {
+        role: 'model',
+        parts: [
+          {
+            text: this.buildContextMessage(),
+          },
+        ],
+      },
+    ];
 
     this.state = {
       metadata: {
@@ -291,42 +420,76 @@ Bu bilgiler varsa tekrar sorma.
         messageCount: 0,
       },
     };
+
+    this.refreshContext();
   }
 }
 
 export class SessionManager {
-  private sessions = new Map<
-    string,
-    GeminiService
-  >();
+  private sessions =
+    new Map<
+      string,
+      GeminiService
+    >();
 
-  getSession(sessionId: string) {
-    let session = this.sessions.get(sessionId);
+  getSession(
+    sessionId: string
+  ) {
+    let session =
+      this.sessions.get(
+        sessionId
+      );
 
     if (!session) {
-      session = new GeminiService(sessionId);
-      this.sessions.set(sessionId, session);
+      session =
+        new GeminiService(
+          sessionId
+        );
+
+      this.sessions.set(
+        sessionId,
+        session
+      );
     }
 
     return session;
   }
 
-  removeSession(sessionId: string) {
-    this.sessions.delete(sessionId);
+  removeSession(
+    sessionId: string
+  ) {
+    this.sessions.delete(
+      sessionId
+    );
   }
 
-  cleanupIdleSessions(maxIdleMinutes = 30) {
-    const now = Date.now();
+  cleanupIdleSessions(
+    maxIdleMinutes = 30
+  ) {
+    const now =
+      Date.now();
 
-    for (const [id, session] of this.sessions) {
+    for (const [
+      id,
+      session,
+    ] of this.sessions) {
       const updated =
-        session.getState().metadata.updatedAt.getTime();
+        session
+          .getState()
+          .metadata.updatedAt.getTime();
 
       const idleMinutes =
-        (now - updated) / 1000 / 60;
+        (now - updated) /
+        1000 /
+        60;
 
-      if (idleMinutes > maxIdleMinutes) {
-        this.sessions.delete(id);
+      if (
+        idleMinutes >
+        maxIdleMinutes
+      ) {
+        this.sessions.delete(
+          id
+        );
       }
     }
   }

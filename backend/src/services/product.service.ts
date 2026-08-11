@@ -4,6 +4,34 @@ export class ProductService {
   private products =
     new ProductRepository();
 
+
+ async listProducts(filters?: {
+  category?: string;
+  inStock?: boolean;
+  maxPrice?: number;
+}) {
+  const productRepo =
+    new ProductRepository();
+
+  const products =
+    await productRepo.listActive(
+      filters
+    );
+
+  return products.map(
+    (p) => ({
+      id: p.id,
+      name: p.name,
+      price: Number(
+        p.price
+      ),
+      currency:
+        p.currency,
+      stock: p.stock,
+    })
+  );
+}
+
   async searchProducts(
     keyword: string
   ) {

@@ -18,7 +18,7 @@ export function setupWebSocket(
 
   wss.on(
     'connection',
-    (client: WebSocket) => {
+    async (client: WebSocket) => {
       console.log(
         'New recording session'
       );
@@ -46,6 +46,53 @@ export function setupWebSocket(
           sessionId,
         })
       );
+
+      try {
+        const welcome =
+          await gemini.startConversation();
+
+        client.send(
+          JSON.stringify({
+            type: 'assistant',
+            text: welcome.text,
+          })
+        );
+
+        const welcomeAudio =
+          await tts.synthesizeChunks(
+            welcome.text
+          );
+
+        for (
+          let i = 0;
+          i <
+          welcomeAudio.length;
+          i++
+        ) {
+          client.send(
+            JSON.stringify({
+              type: 'assistant_audio_chunk',
+              audio: welcomeAudio[i],
+              index: i,
+              isLast:
+                i ===
+                welcomeAudio.length -
+                  1,
+            })
+          );
+        }
+
+        client.send(
+          JSON.stringify({
+            type: 'session_complete',
+          })
+        );
+      } catch (err) {
+        console.error(
+          'Welcome error:',
+          err
+        );
+      }
 
       client.on(
         'message',
@@ -197,16 +244,27 @@ export function setupWebSocket(
                 type: 'session_complete',
               })
             );
-          } catch (err) {
+          } catch (err: any) {
             console.error(
               'WebSocket error:',
               err
             );
 
+            let message =
+              'Bir hata oluştu. Lütfen tekrar deneyin.';
+
+            if (
+              err?.status ===
+              429
+            ) {
+              message =
+                'Sistem şu anda yoğun. Lütfen birkaç saniye sonra tekrar deneyin.';
+            }
+
             client.send(
               JSON.stringify({
                 type: 'assistant',
-                text: 'Bir hata oluştu. Lütfen tekrar deneyin.',
+                text: message,
               })
             );
           }

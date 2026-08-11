@@ -11,6 +11,7 @@ interface WsMessage {
   type: string;
   text?: string;
   audio?: string;
+  sessionId?: string;
 }
 
 export default function App() {
@@ -22,12 +23,7 @@ export default function App() {
   const processorRef =
   useRef<ScriptProcessorNode | null>(null);
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'assistant',
-      text: 'Merhaba, size nasıl yardımcı olabilirim?',
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -36,9 +32,23 @@ export default function App() {
 
   const timerRef = useRef<number | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
+  const currentAudio = useRef<HTMLAudioElement | null>(null);
 
   const audioQueue = useRef<string[]>([]);
   const isPlaying = useRef(false);
+
+
+  const stopCurrentAudio = () => {
+  audioQueue.current = [];
+
+  if (currentAudio.current) {
+    currentAudio.current.pause();
+    currentAudio.current.currentTime = 0;
+    currentAudio.current = null;
+  }
+
+  isPlaying.current = false;
+};
 
   const playNext = () => {
     if (isPlaying.current) return;
@@ -52,18 +62,23 @@ export default function App() {
       `data:audio/wav;base64,${next}`
     );
 
+     currentAudio.current = audio;
+
     audio.onended = () => {
       isPlaying.current = false;
+      currentAudio.current = null;
       playNext();
     };
 
     audio.onerror = () => {
       isPlaying.current = false;
+      currentAudio.current = null;
       playNext();
     };
 
     audio.play().catch(() => {
       isPlaying.current = false;
+      currentAudio.current = null;
       playNext();
     });
   };
@@ -95,6 +110,7 @@ export default function App() {
           break;
 
         case 'assistant':
+          stopCurrentAudio();
           setIsProcessing(false);
           setMessages((prev) => [
             ...prev,
@@ -114,7 +130,18 @@ export default function App() {
             }
           }
           break;
-
+        case 'session':
+          if (msg.sessionId) {
+            localStorage.setItem(
+              'voice_session',
+              msg.sessionId
+            );
+            console.log(
+              'Session:',
+              msg.sessionId
+            );
+          }
+          break;
         case 'session_complete':
           setIsProcessing(false);
           break;
@@ -123,8 +150,6 @@ export default function App() {
 
     wsRef.current = ws;
 
-    const welcome = new Audio('/welcome.wav');
-    welcome.play().catch(() => {});
 
     return () => {
       ws.close();
@@ -141,7 +166,11 @@ export default function App() {
   
  
   const startRecording = async () => {
+    audioQueue.current = [];
+    isPlaying.current = false;
     if (isRecording) return;
+
+    stopCurrentAudio();
 
     if (
       !wsRef.current ||

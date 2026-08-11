@@ -15,13 +15,13 @@ export class CargoRepository extends BaseRepository<Cargo> {
   }
 
   private generateTrackingNumber() {
-    const date = Date.now();
-
+   const max = 1000000
+   const min = 1000
     const random = Math.floor(
-      Math.random() * 100000
+      Math.random() * (max - min +1)
     );
 
-    return `TRK-${date}-${random}`;
+    return `${random}`;
   }
 
   async createCargo(
