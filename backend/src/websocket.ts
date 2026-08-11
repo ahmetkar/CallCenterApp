@@ -48,39 +48,34 @@ export function setupWebSocket(
       );
 
       try {
+        
         const welcome =
-          await gemini.startConversation();
+                await gemini.startConversation();
 
-        client.send(
-          JSON.stringify({
-            type: 'assistant',
-            text: welcome.text,
-          })
-        );
+              client.send(
+                JSON.stringify({
+                  type: 'assistant',
+                  text: welcome.text,
+                })
+              );
 
-        const welcomeAudio =
-          await tts.synthesizeChunks(
-            welcome.text
-          );
+              let index = 0;
 
-        for (
-          let i = 0;
-          i <
-          welcomeAudio.length;
-          i++
-        ) {
-          client.send(
-            JSON.stringify({
-              type: 'assistant_audio_chunk',
-              audio: welcomeAudio[i],
-              index: i,
-              isLast:
-                i ===
-                welcomeAudio.length -
-                  1,
-            })
-          );
-        }
+              for await (const chunk of tts.synthesizeStream(
+                welcome.text
+              )) {
+                client.send(chunk, {
+                  binary: true,
+                });
+
+                index++;
+              }
+
+              client.send(
+                JSON.stringify({
+                  type: 'audio_end',
+                })
+              );
 
         client.send(
           JSON.stringify({
@@ -215,29 +210,23 @@ export function setupWebSocket(
               })
             );
 
-            const audioChunks =
-              await tts.synthesizeChunks(
-                ai.text
-              );
+            let index = 0;
 
-            for (
-              let i = 0;
-              i <
-              audioChunks.length;
-              i++
-            ) {
-              client.send(
-                JSON.stringify({
-                  type: 'assistant_audio_chunk',
-                  audio: audioChunks[i],
-                  index: i,
-                  isLast:
-                    i ===
-                    audioChunks.length -
-                      1,
-                })
-              );
+            for await (const chunk of tts.synthesizeStream(
+              ai.text
+            )) {
+              client.send(chunk, {
+                binary: true,
+              });
+
+              index++;
             }
+
+            client.send(
+              JSON.stringify({
+                type: 'audio_end',
+              })
+            );
 
             client.send(
               JSON.stringify({

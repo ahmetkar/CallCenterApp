@@ -10,73 +10,98 @@ interface ChatMessage {
 interface WsMessage {
   type: string;
   text?: string;
-  audio?: string;
   sessionId?: string;
 }
 
 export default function App() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [duration, setDuration] = useState(0);
+  const [isRecording, setIsRecording] =
+    useState(false);
+  const [isProcessing, setIsProcessing] =
+    useState(false);
+  const [duration, setDuration] =
+    useState(0);
   const [level, setLevel] = useState(0);
 
   const processorRef =
-  useRef<ScriptProcessorNode | null>(null);
+    useRef<ScriptProcessorNode | null>(
+      null
+    );
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] =
+    useState<ChatMessage[]>([]);
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const wsRef = useRef<WebSocket | null>(
+    null
+  );
+  const streamRef =
+    useRef<MediaStream | null>(null);
   const audioContextRef =
     useRef<AudioContext | null>(null);
 
-  const timerRef = useRef<number | null>(null);
-  const chatRef = useRef<HTMLDivElement | null>(null);
-  const currentAudio = useRef<HTMLAudioElement | null>(null);
+  const timerRef =
+    useRef<number | null>(null);
+  const chatRef =
+    useRef<HTMLDivElement | null>(null);
 
-  const audioQueue = useRef<string[]>([]);
+  const currentAudio =
+    useRef<HTMLAudioElement | null>(
+      null
+    );
+
+  const audioQueue =
+    useRef<ArrayBuffer[]>([]);
+
   const isPlaying = useRef(false);
 
-
   const stopCurrentAudio = () => {
-  audioQueue.current = [];
+    audioQueue.current = [];
 
-  if (currentAudio.current) {
-    currentAudio.current.pause();
-    currentAudio.current.currentTime = 0;
-    currentAudio.current = null;
-  }
+    if (currentAudio.current) {
+      currentAudio.current.pause();
+      currentAudio.current.currentTime = 0;
+      currentAudio.current = null;
+    }
 
-  isPlaying.current = false;
-};
+    isPlaying.current = false;
+  };
 
   const playNext = () => {
     if (isPlaying.current) return;
 
-    const next = audioQueue.current.shift();
+    const next =
+      audioQueue.current.shift();
+
     if (!next) return;
 
     isPlaying.current = true;
 
-    const audio = new Audio(
-      `data:audio/wav;base64,${next}`
-    );
+    const blob = new Blob([next], {
+      type: 'audio/ogg',
+    });
 
-     currentAudio.current = audio;
+    const url =
+      URL.createObjectURL(blob);
+
+    const audio = new Audio(url);
+
+    currentAudio.current = audio;
 
     audio.onended = () => {
+      URL.revokeObjectURL(url);
       isPlaying.current = false;
       currentAudio.current = null;
       playNext();
     };
 
     audio.onerror = () => {
+      URL.revokeObjectURL(url);
       isPlaying.current = false;
       currentAudio.current = null;
       playNext();
     };
 
     audio.play().catch(() => {
+      URL.revokeObjectURL(url);
       isPlaying.current = false;
       currentAudio.current = null;
       playNext();
@@ -87,6 +112,7 @@ export default function App() {
     const ws = new WebSocket(
       'ws://localhost:4000'
     );
+
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => {
@@ -94,6 +120,20 @@ export default function App() {
     };
 
     ws.onmessage = (event) => {
+      if (
+        event.data instanceof ArrayBuffer
+      ) {
+        audioQueue.current.push(
+          event.data
+        );
+
+        if (!isPlaying.current) {
+          playNext();
+        }
+
+        return;
+      }
+
       const msg = JSON.parse(
         event.data
       ) as WsMessage;
@@ -111,7 +151,9 @@ export default function App() {
 
         case 'assistant':
           stopCurrentAudio();
+
           setIsProcessing(false);
+
           setMessages((prev) => [
             ...prev,
             {
@@ -121,27 +163,19 @@ export default function App() {
           ]);
           break;
 
-        case 'assistant_audio_chunk':
-          if (msg.audio) {
-            audioQueue.current.push(msg.audio);
-
-            if (!isPlaying.current) {
-              playNext();
-            }
-          }
-          break;
         case 'session':
           if (msg.sessionId) {
             localStorage.setItem(
               'voice_session',
               msg.sessionId
             );
-            console.log(
-              'Session:',
-              msg.sessionId
-            );
           }
           break;
+
+        case 'audio_end':
+          setIsProcessing(false);
+          break;
+
         case 'session_complete':
           setIsProcessing(false);
           break;
@@ -150,8 +184,8 @@ export default function App() {
 
     wsRef.current = ws;
 
-
     return () => {
+      stopCurrentAudio();
       ws.close();
     };
   }, []);
@@ -163,154 +197,185 @@ export default function App() {
     });
   }, [messages]);
 
-  
- 
-  const startRecording = async () => {
-    audioQueue.current = [];
-    isPlaying.current = false;
-    if (isRecording) return;
+  const startRecording =
+    async () => {
+      audioQueue.current = [];
+      isPlaying.current = false;
 
-    stopCurrentAudio();
+      if (isRecording) return;
 
-    if (
-      !wsRef.current ||
-      wsRef.current.readyState !== WebSocket.OPEN
-    ) {
-      alert('WebSocket bağlantısı hazır değil');
-      return;
-    }
+      stopCurrentAudio();
 
-    try {
-      const stream =
-        await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-
-      streamRef.current = stream;
-
-      const audioContext = new AudioContext({
-        sampleRate: 48000,
-      });
-
-      audioContextRef.current = audioContext;
-
-      const source =
-        audioContext.createMediaStreamSource(
-          stream
+      if (
+        !wsRef.current ||
+        wsRef.current.readyState !==
+          WebSocket.OPEN
+      ) {
+        alert(
+          'WebSocket bağlantısı hazır değil'
         );
+        return;
+      }
 
-      const processor =
-        audioContext.createScriptProcessor(
-          4096,
-          1,
-          1
-        );
+      try {
+        const stream =
+          await navigator.mediaDevices.getUserMedia(
+            {
+              audio: true,
+            }
+          );
 
-      processorRef.current = processor;
+        streamRef.current = stream;
 
-      processor.onaudioprocess = (event) => {
-        const input =
-          event.inputBuffer.getChannelData(0);
+        const audioContext =
+          new AudioContext({
+            sampleRate: 48000,
+          });
 
-           console.log(
-              'Frontend samples:',
-              input.length,
-              input.byteLength
+        audioContextRef.current =
+          audioContext;
+
+        const source =
+          audioContext.createMediaStreamSource(
+            stream
+          );
+
+        const processor =
+          audioContext.createScriptProcessor(
+            4096,
+            1,
+            1
+          );
+
+        processorRef.current =
+          processor;
+
+        processor.onaudioprocess = (
+          event
+        ) => {
+          const input =
+            event.inputBuffer.getChannelData(
+              0
             );
 
+          let sum = 0;
 
-        let sum = 0;
-        for (let i = 0; i < input.length; i++) {
-          sum += input[i] * input[i];
-        }
+          for (
+            let i = 0;
+            i < input.length;
+            i++
+          ) {
+            sum +=
+              input[i] *
+              input[i];
+          }
 
-        const rms = Math.sqrt(sum / input.length);
-        setLevel(Math.min(1, rms * 4));
+          const rms = Math.sqrt(
+            sum / input.length
+          );
 
-        if (
-          wsRef.current?.readyState ===
-          WebSocket.OPEN
-        ) {
-          const copy = new Float32Array(input);
-          wsRef.current.send(copy.buffer);
-        }
-      };
+          setLevel(
+            Math.min(1, rms * 4)
+          );
 
-      source.connect(processor);
-      processor.connect(audioContext.destination);
+          if (
+            wsRef.current
+              ?.readyState ===
+            WebSocket.OPEN
+          ) {
+            const copy =
+              new Float32Array(
+                input
+              );
 
-      let d = 0;
-      timerRef.current = window.setInterval(
-        () => {
-          d++;
-          setDuration(d);
-        },
-        1000
-      );
+            wsRef.current.send(
+              copy.buffer
+            );
+          }
+        };
 
-      setIsRecording(true);
-      setIsProcessing(false);
+        source.connect(processor);
+        processor.connect(
+          audioContext.destination
+        );
 
-      console.log('Recording started');
-    } catch (err) {
-      console.error('Recording error', err);
-    }
-  };
-  
-  
-  const stopRecording = async () => {
-  if (!isRecording) return;
+        let d = 0;
 
-  // ScriptProcessor'ı durdur
-  processorRef.current?.disconnect();
-  processorRef.current = null;
+        timerRef.current =
+          window.setInterval(() => {
+            d++;
+            setDuration(d);
+          }, 1000);
 
-  // Mikrofonu kapat
-  streamRef.current?.getTracks().forEach((track) =>
-    track.stop()
-  );
-  streamRef.current = null;
+        setIsRecording(true);
+        setIsProcessing(false);
+      } catch (err) {
+        console.error(
+          'Recording error',
+          err
+        );
+      }
+    };
 
-  // AudioContext'i kapat
-  if (audioContextRef.current) {
-    await audioContextRef.current.close();
-    audioContextRef.current = null;
-  }
+  const stopRecording =
+    async () => {
+      if (!isRecording) return;
 
-  // Timer'ı durdur
-  if (timerRef.current) {
-    clearInterval(timerRef.current);
-    timerRef.current = null;
-  }
+      processorRef.current?.disconnect();
+      processorRef.current = null;
 
-  // UI sıfırla
-  setDuration(0);
-  setLevel(0);
-  setIsRecording(false);
-  setIsProcessing(true);
+      streamRef.current
+        ?.getTracks()
+        .forEach((track) =>
+          track.stop()
+        );
 
-  // Backend'e kayıt bitti bilgisini gönder
-  if (
-    wsRef.current?.readyState ===
-    WebSocket.OPEN
-  ) {
-    wsRef.current.send(
-      JSON.stringify({
-        type: 'stop',
-      })
-    );
-  }
+      streamRef.current = null;
 
-  console.log('Recording stopped');
-};
+      if (
+        audioContextRef.current
+      ) {
+        await audioContextRef.current.close();
 
-  const toggleRecording = async () => {
-    if (isRecording) {
-      await stopRecording();
-    } else {
-      await startRecording();
-    }
-  };
+        audioContextRef.current =
+          null;
+      }
+
+      if (timerRef.current) {
+        clearInterval(
+          timerRef.current
+        );
+
+        timerRef.current =
+          null;
+      }
+
+      setDuration(0);
+      setLevel(0);
+      setIsRecording(false);
+      setIsProcessing(true);
+
+      if (
+        wsRef.current
+          ?.readyState ===
+        WebSocket.OPEN
+      ) {
+        wsRef.current.send(
+          JSON.stringify({
+            type: 'stop',
+          })
+        );
+      }
+    };
+
+  const toggleRecording =
+    async () => {
+      if (isRecording) {
+        await stopRecording();
+      } else {
+        await startRecording();
+      }
+    };
 
   return (
     <div className="container">
@@ -320,14 +385,22 @@ export default function App() {
         <div className="mic-wrapper">
           <button
             className={`mic-button ${
-              isRecording ? 'recording' : ''
+              isRecording
+                ? 'recording'
+                : ''
             }`}
-            onClick={toggleRecording}
+            onClick={
+              toggleRecording
+            }
           >
             {isRecording ? (
-              <Square size={36} />
+              <Square
+                size={36}
+              />
             ) : (
-              <Mic size={36} />
+              <Mic
+                size={36}
+              />
             )}
           </button>
         </div>
@@ -335,27 +408,35 @@ export default function App() {
         <div className="status">
           <span
             className={`dot ${
-              isRecording ? 'active' : ''
+              isRecording
+                ? 'active'
+                : ''
             }`}
           />
+
           {isRecording
             ? 'Dinleniyor...'
             : 'Mikrofon kapalı'}
         </div>
 
         <div className="timer">
-          {String(Math.floor(duration / 60)).padStart(
-            2,
-            '0'
-          )}
+          {String(
+            Math.floor(
+              duration / 60
+            )
+          ).padStart(2, '0')}
           :
-          {String(duration % 60).padStart(2, '0')}
+          {String(
+            duration % 60
+          ).padStart(2, '0')}
         </div>
 
         <div className="level-bar">
           <div
             className="level-fill"
-            style={{ width: `${level * 100}%` }}
+            style={{
+              width: `${level * 100}%`,
+            }}
           />
         </div>
       </div>
@@ -369,14 +450,16 @@ export default function App() {
           ref={chatRef}
           className="chat-window"
         >
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className={`bubble ${m.role}`}
-            >
-              {m.text}
-            </div>
-          ))}
+          {messages.map(
+            (m, i) => (
+              <div
+                key={i}
+                className={`bubble ${m.role}`}
+              >
+                {m.text}
+              </div>
+            )
+          )}
 
           {isProcessing && (
             <div className="bubble assistant loading">
@@ -388,3 +471,4 @@ export default function App() {
     </div>
   );
 }
+
