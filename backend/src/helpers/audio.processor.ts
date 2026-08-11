@@ -1,3 +1,11 @@
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import { Readable, PassThrough } from 'stream';
+
+ffmpeg.setFfmpegPath(
+  ffmpegInstaller.path
+);
+
 export class AudioProcessor {
   private frames: Float32Array[] = [];
 
@@ -107,4 +115,62 @@ export class AudioProcessor {
 
     return result;
   }
+
+
+  async convertOggToPcm(
+  oggBuffer: Buffer
+): Promise<Buffer> {
+  return new Promise(
+    (resolve, reject) => {
+      const input =
+        new Readable();
+
+      input.push(oggBuffer);
+      input.push(null);
+
+      const output =
+        new PassThrough();
+
+      const chunks: Buffer[] =
+        [];
+
+      output.on(
+        'data',
+        (chunk) => {
+          chunks.push(
+            Buffer.from(chunk)
+          );
+        }
+      );
+
+      output.on(
+        'end',
+        () => {
+          resolve(
+            Buffer.concat(chunks)
+          );
+        }
+      );
+
+      output.on(
+        'error',
+        reject
+      );
+
+      ffmpeg(input)
+        .inputFormat('ogg')
+        .audioCodec('pcm_s16le')
+        .audioChannels(1)
+        .audioFrequency(16000)
+        .format('s16le')
+        .on(
+          'error',
+          reject
+        )
+        .pipe(output, {
+          end: true,
+        });
+    }
+  );
+}
 }

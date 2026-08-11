@@ -19,7 +19,7 @@ export class TtsService {
       );
   }
 
-  private async synthesizeSentence(
+  private async synthesizeSentenceForFrontend(
     sentence: string
   ): Promise<Buffer> {
     const [response] =
@@ -47,6 +47,32 @@ export class TtsService {
     );
   }
 
+  async synthesizeSentenceForCloud(
+  text: string
+): Promise<Buffer> {
+  const [response] =
+    await client.synthesizeSpeech({
+      input: { text },
+      voice: {
+        languageCode:
+          'tr-TR',
+        name: 'tr-TR-Standard-A',
+      },
+      audioConfig: {
+        audioEncoding:
+          'LINEAR16',
+        sampleRateHertz: 16000,
+         speakingRate: 1.3,
+          pitch: 0.8,
+          volumeGainDb: 1.7,
+      },
+    });
+
+  return Buffer.from(
+    response.audioContent as Uint8Array
+  );
+}
+
   async *synthesizeStream(
     text: string
   ): AsyncGenerator<
@@ -61,7 +87,7 @@ export class TtsService {
 
     for (const sentence of sentences) {
       try {
-        yield await this.synthesizeSentence(
+        yield await this.synthesizeSentenceForFrontend(
           sentence
         );
       } catch (err) {
