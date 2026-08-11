@@ -19,7 +19,7 @@ export class TtsService {
       );
   }
 
-  private async synthesizeSentenceForFrontend(
+  private async synthesizeOgg(
     sentence: string
   ): Promise<Buffer> {
     const [response] =
@@ -36,9 +36,9 @@ export class TtsService {
           audioEncoding:
             'OGG_OPUS',
           sampleRateHertz: 16000,
-          speakingRate: 1.3,
-          pitch: 0.8,
-          volumeGainDb: 1.7,
+          speakingRate: 1.16,
+          pitch: 0.4,
+          volumeGainDb: 1.0,
         },
       });
 
@@ -46,32 +46,6 @@ export class TtsService {
       response.audioContent as Uint8Array
     );
   }
-
-  async synthesizeSentenceForCloud(
-  text: string
-): Promise<Buffer> {
-  const [response] =
-    await client.synthesizeSpeech({
-      input: { text },
-      voice: {
-        languageCode:
-          'tr-TR',
-        name: 'tr-TR-Standard-A',
-      },
-      audioConfig: {
-        audioEncoding:
-          'LINEAR16',
-        sampleRateHertz: 16000,
-         speakingRate: 1.3,
-          pitch: 0.8,
-          volumeGainDb: 1.7,
-      },
-    });
-
-  return Buffer.from(
-    response.audioContent as Uint8Array
-  );
-}
 
   async *synthesizeStream(
     text: string
@@ -87,15 +61,43 @@ export class TtsService {
 
     for (const sentence of sentences) {
       try {
-        yield await this.synthesizeSentenceForFrontend(
+        yield await this.synthesizeOgg(
           sentence
         );
       } catch (err) {
         console.error(
-          'Google TTS error:',
+          'Google TTS OGG error:',
           err
         );
       }
     }
+  }
+
+  async synthesizeForCloud(
+    text: string
+  ): Promise<Buffer> {
+    const [response] =
+      await client.synthesizeSpeech({
+        input: {
+          ssml: `<speak>${text}</speak>`,
+        },
+        voice: {
+          languageCode:
+            'tr-TR',
+          name: 'tr-TR-Standard-A',
+        },
+        audioConfig: {
+          audioEncoding:
+            'LINEAR16',
+          sampleRateHertz: 16000,
+          speakingRate: 1.16,
+          pitch: 0.4,
+          volumeGainDb: 1.0,
+        },
+      });
+
+    return Buffer.from(
+      response.audioContent as Uint8Array
+    );
   }
 }
