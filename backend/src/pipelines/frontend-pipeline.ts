@@ -76,6 +76,9 @@ export class FrontendPipeline
       return;
     }
 
+    //isBinary=true olduğunda ses parçaları geliyordu isBinary=false olduğunda {type:'stop'} geliyor
+    //binary toString e çevirerek bunu okuyoruz. stop ise pcm bufferine kaydedilen tüm sesleri alıyoruz ve processPcm ile işliyoruz.
+
     const message =
       JSON.parse(
         raw.toString()
@@ -152,6 +155,7 @@ export class FrontendPipeline
       })
     );
 
+    //Transport aracılığıyla geminiden gelen çıktıyı google tts ile işleyip kullanıcıya gmnderiyorum.
     await this.transport.send(
       ai.text
     );
