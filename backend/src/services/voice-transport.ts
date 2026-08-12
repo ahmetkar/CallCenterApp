@@ -1,113 +1,70 @@
-import { WebSocket } from 'ws';
-import { TtsService } from './tts.service';
+import type { WebSocket as NodeWebSocket } from 'ws';
+import { TtsService } from "./tts.service";
 
-export interface VoiceTransport {
-  send(text: string): Promise<void>;
+export class FrontendVoiceTransport {
+  private currentRequest = 0;
 
-  onAudio?(
-    callback: (
-      pcm: Buffer
-    ) => Promise<void>
-  ): void;
-
-  close?(): Promise<void>;
-}
-
-export class FrontendVoiceTransport
-  implements VoiceTransport
-{
   constructor(
-    private client: WebSocket,
+    private client: NodeWebSocket,
     private tts: TtsService
   ) {}
 
-  async send(
-    text: string
-  ): Promise<void> {
-    for await (const chunk of this.tts.synthesizeStream(
-      text
-    )) {
-      this.client.send(chunk, {
-        binary: true,
-      });
+  async send(text: string): Promise<void> {
+  const requestId = ++this.currentRequest;
+
+  for await (const chunk of this.tts.synthesizeStream(text)) {
+    if (requestId !== this.currentRequest) {
+      return;
     }
 
+    const arrayBuffer = chunk.buffer.slice(
+        chunk.byteOffset,
+        chunk.byteOffset + chunk.byteLength
+      ) as ArrayBuffer;
+
+
+    this.client.send(
+      arrayBuffer
+    );
+  }
+
+  if (requestId === this.currentRequest) {
     this.client.send(
       JSON.stringify({
         type: 'audio_end',
       })
     );
   }
+}
 
-  async close(): Promise<void> {
-    // Frontend tarafında kapatılacak ekstra bir kaynak yok.
+  close() {
+    this.currentRequest++;
   }
 }
 
-export class CloudVoiceTransport
-  implements VoiceTransport
-{
+export class CloudVoiceTransport {
   private audioCallback?: (
     pcm: Buffer
-  ) => Promise<void>;
+  ) => void;
 
   constructor(
     private tts: TtsService
   ) {}
 
-  async send(
-    text: string
-  ): Promise<void> {
-    const pcm =
-      await this.tts.synthesizeForCloud(
-        text
-      );
-
-    await this.sendAudioToCloud(
-      pcm
-    );
-  }
-
   onAudio(
     callback: (
       pcm: Buffer
-    ) => Promise<void>
-  ): void {
-    this.audioCallback =
-      callback;
+    ) => void
+  ) {
+    this.audioCallback = callback;
   }
 
-  async receiveFromCloud(
-    pcm: Buffer
-  ): Promise<void> {
-    if (
-      this.audioCallback
-    ) {
-      await this.audioCallback(
-        pcm
-      );
-    }
+  async send(text: string): Promise<void> {
+    const pcm =
+      await this.tts.synthesizeForCloud(text);
+
+    this.audioCallback?.(pcm);
   }
 
-  private async sendAudioToCloud(
-    pcm: Buffer
-  ): Promise<void> {
-    // TODO:
-    // Buraya gerçek cloud santral adapter'i gelecek.
-    // Örnek:
-    // await twilioAdapter.sendAudio(pcm);
-    // await amazonConnectAdapter.sendAudio(pcm);
-    // await asteriskAdapter.sendAudio(pcm);
-
-    console.log(
-      'Cloud audio sent:',
-      pcm.length,
-      'bytes'
-    );
-  }
-
-  async close(): Promise<void> {
-    // TODO:
-    // Santral bağlantısını kapat.
-  }
+  close() {}
 }

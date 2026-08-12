@@ -17,6 +17,15 @@ export class CloudPipeline
 
   private transport: CloudVoiceTransport;
 
+  private processing = false;
+
+  private transcriptQueue: string[] = [];
+
+  private transcriptBuffer: string[] = [];
+
+  private speechTimer: NodeJS.Timeout | null =
+    null;
+
   constructor(
     private client: WebSocket,
     private gemini: GeminiService
@@ -27,17 +36,29 @@ export class CloudPipeline
       );
 
     this.transport.onAudio(
-      async (
-        pcm: Buffer
-      ) => {
-        await this.processPcm(
+      (pcm: Buffer) => {
+        void this.deepgram.sendAudio(
           pcm
+        );
+      }
+    );
+
+    this.deepgram.onTranscript(
+      (
+        transcript,
+        speechFinal
+      ) => {
+        this.handleTranscriptEvent(
+          transcript,
+          speechFinal
         );
       }
     );
   }
 
   async start(): Promise<void> {
+    await this.deepgram.connect();
+
     const welcome =
       await this.gemini.startConversation();
 
@@ -63,24 +84,14 @@ export class CloudPipeline
     raw: Buffer,
     isBinary: boolean
   ): Promise<void> {
-    // Cloud modunda frontend'den ses beklenmiyor.
-    // Bu metod sadece kontrol mesajları için kullanılabilir.
     if (isBinary) {
       return;
     }
 
     try {
-      const message =
-        JSON.parse(
-          raw.toString()
-        );
-
-      // İleride:
-      // start-call
-      // end-call
-      // dtmf
-      // transfer
-      // vb. mesajlar burada işlenebilir.
+      const message = JSON.parse(
+        raw.toString()
+      );
 
       if (
         message.type ===
@@ -92,60 +103,147 @@ export class CloudPipeline
           })
         );
       }
+
+      if (
+        message.type ===
+        'stop'
+      ) {
+        if (this.speechTimer) {
+          clearTimeout(
+            this.speechTimer
+          );
+          this.speechTimer = null;
+        }
+
+        await this.deepgram.finishUtterance();
+
+        await new Promise(resolve =>
+          setTimeout(resolve, 150)
+        );
+
+        this.flushTranscriptBuffer();
+      }
     } catch {
-      // JSON değilse görmezden gel.
+      // ignore
     }
   }
 
-  private async processPcm(
-    pcm: Buffer
-  ): Promise<void> {
+  private handleTranscriptEvent(
+    transcript: string,
+    speechFinal: boolean
+  ): void {
+    this.transcriptBuffer.push(
+      transcript
+    );
+
+    if (this.speechTimer) {
+      clearTimeout(
+        this.speechTimer
+      );
+      this.speechTimer = null;
+    }
+
+    if (speechFinal) {
+      this.flushTranscriptBuffer();
+      return;
+    }
+
+    this.speechTimer =
+      setTimeout(() => {
+        this.flushTranscriptBuffer();
+      }, 500);
+  }
+
+  private flushTranscriptBuffer(): void {
     if (
-      pcm.length ===
+      this.transcriptBuffer.length ===
       0
     ) {
       return;
     }
 
-    const transcript =
-      await this.deepgram.transcribePCM(
-        pcm
+    const text =
+      this.transcriptBuffer.join(
+        ' '
       );
 
+    this.transcriptBuffer = [];
+
+    this.enqueueTranscript(
+      text
+    );
+  }
+
+  private enqueueTranscript(
+    transcript: string
+  ): void {
+    this.transcriptQueue.push(
+      transcript
+    );
+
+    void this.processQueue();
+  }
+
+  private async processQueue(): Promise<void> {
     if (
-      !transcript
+      this.processing
     ) {
       return;
     }
 
-    this.client.send(
-      JSON.stringify({
-        type: 'user',
-        text: transcript,
-      })
-    );
+    this.processing = true;
 
-    const ai =
-      await this.gemini.processMessage(
-        transcript
+    try {
+      while (
+        this.transcriptQueue.length >
+        0
+      ) {
+        const transcript =
+          this.transcriptQueue.shift()!;
+
+        console.log(
+          'Cloud transcript:',
+          transcript
+        );
+
+        this.client.send(
+          JSON.stringify({
+            type: 'user',
+            text: transcript,
+          })
+        );
+
+        const ai =
+          await this.gemini.processMessage(
+            transcript
+          );
+
+        this.client.send(
+          JSON.stringify({
+            type: 'assistant',
+            text: ai.text,
+          })
+        );
+
+        // TTS arka planda çalışsın
+        void this.transport
+          .send(ai.text)
+          .catch(console.error);
+
+        this.client.send(
+          JSON.stringify({
+            type: 'session_complete',
+          })
+        );
+      }
+    } catch (err) {
+      console.error(
+        'Cloud pipeline error:',
+        err
       );
-
-    this.client.send(
-      JSON.stringify({
-        type: 'assistant',
-        text: ai.text,
-      })
-    );
-
-    await this.transport.send(
-      ai.text
-    );
-
-    this.client.send(
-      JSON.stringify({
-        type: 'session_complete',
-      })
-    );
+    } finally {
+      this.processing = false;
+    }
   }
 
   getTransport() {
@@ -153,6 +251,14 @@ export class CloudPipeline
   }
 
   async close(): Promise<void> {
+    if (this.speechTimer) {
+      clearTimeout(
+        this.speechTimer
+      );
+    }
+
+    await this.deepgram.close();
     await this.transport.close?.();
   }
 }
+

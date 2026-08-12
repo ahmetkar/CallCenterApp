@@ -36,9 +36,9 @@ export class TtsService {
           audioEncoding:
             'OGG_OPUS',
           sampleRateHertz: 16000,
-          speakingRate: 1.16,
-          pitch: 0.4,
-          volumeGainDb: 1.0,
+          speakingRate: 1.35,
+          pitch: 0.8,
+          volumeGainDb: 1.7,
         },
       });
 

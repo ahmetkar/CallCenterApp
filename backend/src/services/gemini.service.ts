@@ -61,6 +61,7 @@ Kurallar:
 - Ürün ve sipariş bilgilerini sadece tool'lardan al.
 - Bilgi uydurma.
 - Kısa ve doğal konuş.
+- Cevap verirken gereksiz karakter eklemesi yapma sade ve anlaşılır cevap ver.
 - Verilen adres bilgisinin geçerli bir adres bilgisi olup olmadığını kontrol et.
 - Sipariş oluşturmadan önce kullanıcıya aldığın bilgileri söyle ve onayını al
 - Varolan tool ların sağlandığı işlem dışında bir işlem istenirse "Bu isteğinizi gerçekleştiremem" de ve "Başka isteğiniz varmı ?" diye sor.
@@ -73,7 +74,6 @@ Kurallar:
 - Stok adetini direk söyleme sadece kullanıcının istediği miktardan düşük mü diye kontrol et ve buna göre tekrar ürün adeti iste.
 - Stok yetersizse daha düşük adet önermeyi düşün.
 - Kargo veya sipariş bulunamazsa kullanıcıdan sipariş numarasını tekrar söylemesini iste.
-- Ürün listesini sayarken gereksiz karakter eklemesini yapma olabildiğince sade bir şekilde söyle.
 `;
 
 export interface ConversationState {

@@ -2,160 +2,54 @@ import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { Readable, PassThrough } from 'stream';
 
-ffmpeg.setFfmpegPath(
-  ffmpegInstaller.path
-);
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 export class AudioProcessor {
-  private frames: Float32Array[] = [];
+  private chunks: Buffer[] = [];
 
-    addFrame(frame: Float32Array) {
-    console.log(
-        'Frame samples:',
-        frame.length
-    );
-
-    this.frames.push(new Float32Array(frame));
+  addFrame(chunk: Buffer): void {
+    if (chunk.length === 0) {
+      return;
     }
 
-  reset() {
-    this.frames = [];
+    this.chunks.push(Buffer.from(chunk));
+  }
+
+  reset(): void {
+    this.chunks = [];
   }
 
   getPCMBuffer(): Buffer {
-    if (this.frames.length === 0) {
+    if (this.chunks.length === 0) {
       return Buffer.alloc(0);
     }
 
-    // Tüm frame'leri birleştir
-    const totalLength = this.frames.reduce(
-      (sum, frame) => sum + frame.length,
-      0
-    );
-
-    const merged = new Float32Array(totalLength);
-
-    let offset = 0;
-
-    for (const frame of this.frames) {
-      merged.set(frame, offset);
-      offset += frame.length;
-    }
-
-    // 48 kHz -> 16 kHz
-    const downsampled = this.downsample(
-      merged,
-      48000,
-      16000
-    );
-
-    // Float32 -> Int16
-    const pcm = new Int16Array(
-      downsampled.length
-    );
-
-    for (let i = 0; i < downsampled.length; i++) {
-      const sample = Math.max(
-        -1,
-        Math.min(1, downsampled[i])
-      );
-
-      pcm[i] =
-        sample < 0
-          ? sample * 32768
-          : sample * 32767;
-    }
-
-    return Buffer.from(pcm.buffer);
+    return Buffer.concat(this.chunks);
   }
-
-  private downsample(
-    buffer: Float32Array,
-    inputRate: number,
-    outputRate: number
-  ): Float32Array {
-    if (inputRate === outputRate) {
-      return buffer;
-    }
-
-    const ratio = inputRate / outputRate;
-    const newLength = Math.round(
-      buffer.length / ratio
-    );
-
-    const result = new Float32Array(newLength);
-
-    let offsetResult = 0;
-    let offsetBuffer = 0;
-
-    while (offsetResult < result.length) {
-      const nextOffsetBuffer = Math.round(
-        (offsetResult + 1) * ratio
-      );
-
-      let accum = 0;
-      let count = 0;
-
-      for (
-        let i = offsetBuffer;
-        i < nextOffsetBuffer &&
-        i < buffer.length;
-        i++
-      ) {
-        accum += buffer[i];
-        count++;
-      }
-
-      result[offsetResult] =
-        count > 0 ? accum / count : 0;
-
-      offsetResult++;
-      offsetBuffer = nextOffsetBuffer;
-    }
-
-    return result;
-  }
-
 
   async convertOggToPcm(
-  oggBuffer: Buffer
-): Promise<Buffer> {
-  return new Promise(
-    (resolve, reject) => {
-      const input =
-        new Readable();
+    oggBuffer: Buffer
+  ): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const input = new Readable({
+        read() {},
+      });
 
       input.push(oggBuffer);
       input.push(null);
 
-      const output =
-        new PassThrough();
+      const output = new PassThrough();
+      const chunks: Buffer[] = [];
 
-      const chunks: Buffer[] =
-        [];
+      output.on('data', chunk => {
+        chunks.push(Buffer.from(chunk));
+      });
 
-      output.on(
-        'data',
-        (chunk) => {
-          chunks.push(
-            Buffer.from(chunk)
-          );
-        }
-      );
+      output.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
 
-      output.on(
-        'end',
-        () => {
-          resolve(
-            Buffer.concat(chunks)
-          );
-        }
-      );
-
-      output.on(
-        'error',
-        reject
-      );
+      output.on('error', reject);
 
       ffmpeg(input)
         .inputFormat('ogg')
@@ -163,14 +57,10 @@ export class AudioProcessor {
         .audioChannels(1)
         .audioFrequency(16000)
         .format('s16le')
-        .on(
-          'error',
-          reject
-        )
+        .on('error', reject)
         .pipe(output, {
           end: true,
         });
-    }
-  );
-}
+    });
+  }
 }

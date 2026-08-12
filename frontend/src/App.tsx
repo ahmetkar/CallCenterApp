@@ -14,43 +14,24 @@ interface WsMessage {
 }
 
 export default function App() {
-  const [isRecording, setIsRecording] =
-    useState(false);
-  const [isProcessing, setIsProcessing] =
-    useState(false);
-  const [duration, setDuration] =
-    useState(0);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [duration, setDuration] = useState(0);
   const [level, setLevel] = useState(0);
 
-  const processorRef =
-    useRef<ScriptProcessorNode | null>(
-      null
-    );
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
-  const [messages, setMessages] =
-    useState<ChatMessage[]>([]);
+   const smoothLevel = useRef(0);
+  const wsRef = useRef<WebSocket | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
 
-  const wsRef = useRef<WebSocket | null>(
-    null
-  );
-  const streamRef =
-    useRef<MediaStream | null>(null);
-  const audioContextRef =
-    useRef<AudioContext | null>(null);
+  const timerRef = useRef<number | null>(null);
+  const chatRef = useRef<HTMLDivElement | null>(null);
 
-  const timerRef =
-    useRef<number | null>(null);
-  const chatRef =
-    useRef<HTMLDivElement | null>(null);
-
-  const currentAudio =
-    useRef<HTMLAudioElement | null>(
-      null
-    );
-
-  const audioQueue =
-    useRef<ArrayBuffer[]>([]);
-
+  const currentAudio = useRef<HTMLAudioElement | null>(null);
+  const audioQueue = useRef<ArrayBuffer[]>([]);
   const isPlaying = useRef(false);
 
   const stopCurrentAudio = () => {
@@ -68,8 +49,7 @@ export default function App() {
   const playNext = () => {
     if (isPlaying.current) return;
 
-    const next =
-      audioQueue.current.shift();
+    const next = audioQueue.current.shift();
 
     if (!next) return;
 
@@ -79,9 +59,7 @@ export default function App() {
       type: 'audio/ogg',
     });
 
-    const url =
-      URL.createObjectURL(blob);
-
+    const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
 
     currentAudio.current = audio;
@@ -109,23 +87,13 @@ export default function App() {
   };
 
   useEffect(() => {
-    const ws = new WebSocket(
-      'ws://localhost:4000'
-    );
+    const ws = new WebSocket('ws://localhost:4000');
 
     ws.binaryType = 'arraybuffer';
 
-    ws.onopen = () => {
-      console.log('WS connected');
-    };
-
-    ws.onmessage = (event) => {
-      if (
-        event.data instanceof ArrayBuffer
-      ) {
-        audioQueue.current.push(
-          event.data
-        );
+    ws.onmessage = event => {
+      if (event.data instanceof ArrayBuffer) {
+        audioQueue.current.push(event.data);
 
         if (!isPlaying.current) {
           playNext();
@@ -134,13 +102,11 @@ export default function App() {
         return;
       }
 
-      const msg = JSON.parse(
-        event.data
-      ) as WsMessage;
+      const msg = JSON.parse(event.data) as WsMessage;
 
       switch (msg.type) {
         case 'user':
-          setMessages((prev) => [
+          setMessages(prev => [
             ...prev,
             {
               role: 'user',
@@ -154,7 +120,7 @@ export default function App() {
 
           setIsProcessing(false);
 
-          setMessages((prev) => [
+          setMessages(prev => [
             ...prev,
             {
               role: 'assistant',
@@ -163,19 +129,7 @@ export default function App() {
           ]);
           break;
 
-        case 'session':
-          if (msg.sessionId) {
-            localStorage.setItem(
-              'voice_session',
-              msg.sessionId
-            );
-          }
-          break;
-
         case 'audio_end':
-          setIsProcessing(false);
-          break;
-
         case 'session_complete':
           setIsProcessing(false);
           break;
@@ -197,185 +151,153 @@ export default function App() {
     });
   }, [messages]);
 
-  const startRecording =
-    async () => {
-      audioQueue.current = [];
-      isPlaying.current = false;
+  const startRecording = async () => {
+ audioQueue.current = [];
+  isPlaying.current = false;
 
-      if (isRecording) return;
+  if (isRecording) return;
 
-      stopCurrentAudio();
+  stopCurrentAudio();
 
-      if (
-        !wsRef.current ||
-        wsRef.current.readyState !==
-          WebSocket.OPEN
-      ) {
-        alert(
-          'WebSocket bağlantısı hazır değil'
-        );
-        return;
+  if (
+    !wsRef.current ||
+    wsRef.current.readyState !==
+      WebSocket.OPEN
+  ) {
+    alert(
+      'WebSocket bağlantısı hazır değil'
+    );
+    return;
+  }
+
+  const stream =
+    await navigator.mediaDevices.getUserMedia(
+      {
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       }
+    );
 
-      try {
-        const stream =
-          await navigator.mediaDevices.getUserMedia(
-            {
-              audio: true,
-            }
-          );
+  streamRef.current = stream;
 
-        streamRef.current = stream;
+  const audioContext =
+    new AudioContext();
 
-        const audioContext =
-          new AudioContext({
-            sampleRate: 48000,
-          });
+  audioContextRef.current =
+    audioContext;
 
-        audioContextRef.current =
-          audioContext;
+  await audioContext.audioWorklet.addModule(
+    '/audio-worklet.js'
+  );
 
-        const source =
-          audioContext.createMediaStreamSource(
-            stream
-          );
+  const source =
+    audioContext.createMediaStreamSource(
+      stream
+    );
 
-        const processor =
-          audioContext.createScriptProcessor(
-            4096,
-            1,
-            1
-          );
+  const worklet =
+    new AudioWorkletNode(
+      audioContext,
+      'pcm16-processor'
+    );
 
-        processorRef.current =
-          processor;
+  workletNodeRef.current =
+    worklet;
 
-        processor.onaudioprocess = (
-          event
-        ) => {
-          const input =
-            event.inputBuffer.getChannelData(
-              0
-            );
-
-          let sum = 0;
-
-          for (
-            let i = 0;
-            i < input.length;
-            i++
-          ) {
-            sum +=
-              input[i] *
-              input[i];
-          }
-
-          const rms = Math.sqrt(
-            sum / input.length
-          );
-
-          setLevel(
-            Math.min(1, rms * 4)
-          );
-
-          if (
-            wsRef.current
-              ?.readyState ===
-            WebSocket.OPEN
-          ) {
-            const copy =
-              new Float32Array(
-                input
-              );
-
-            wsRef.current.send(
-              copy.buffer
-            );
-          }
-        };
-
-        source.connect(processor);
-        processor.connect(
-          audioContext.destination
-        );
-
-        let d = 0;
-
-        timerRef.current =
-          window.setInterval(() => {
-            d++;
-            setDuration(d);
-          }, 1000);
-
-        setIsRecording(true);
-        setIsProcessing(false);
-      } catch (err) {
-        console.error(
-          'Recording error',
-          err
-        );
-      }
+  worklet.port.onmessage = (
+    event
+  ) => {
+    const {
+      pcm,
+      level: rms,
+    } = event.data as {
+      pcm: ArrayBuffer;
+      level: number;
     };
 
-  const stopRecording =
-    async () => {
-      if (!isRecording) return;
+    smoothLevel.current =
+      smoothLevel.current * 0.8 +
+      rms * 0.2;
 
-      processorRef.current?.disconnect();
-      processorRef.current = null;
+    setLevel(
+      Math.min(
+        1,
+        smoothLevel.current * 4
+      )
+    );
 
-      streamRef.current
-        ?.getTracks()
-        .forEach((track) =>
-          track.stop()
-        );
+    if (
+      wsRef.current?.readyState ===
+      WebSocket.OPEN
+    ) {
+      wsRef.current.send(pcm);
+    }
+  };
 
-      streamRef.current = null;
+  source.connect(worklet);
 
-      if (
-        audioContextRef.current
-      ) {
-        await audioContextRef.current.close();
+  let d = 0;
 
-        audioContextRef.current =
-          null;
-      }
+  timerRef.current =
+    window.setInterval(() => {
+      d++;
+      setDuration(d);
+    }, 1000);
 
-      if (timerRef.current) {
-        clearInterval(
-          timerRef.current
-        );
+  setIsRecording(true);
+  setIsProcessing(false);
+};
 
-        timerRef.current =
-          null;
-      }
+    const stopRecording = async () => {
+    if (!isRecording) return;
 
-      setDuration(0);
-      setLevel(0);
-      setIsRecording(false);
-      setIsProcessing(true);
+    workletNodeRef.current?.disconnect();
+    workletNodeRef.current = null;
 
-      if (
-        wsRef.current
-          ?.readyState ===
-        WebSocket.OPEN
-      ) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: 'stop',
-          })
-        );
-      }
-    };
+    streamRef.current
+      ?.getTracks()
+      .forEach(track => track.stop());
 
-  const toggleRecording =
-    async () => {
-      if (isRecording) {
-        await stopRecording();
-      } else {
-        await startRecording();
-      }
-    };
+    streamRef.current = null;
+
+    if (audioContextRef.current) {
+      await audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    setDuration(0);
+    setLevel(0);
+    setIsRecording(false);
+    setIsProcessing(true);
+
+    if (
+      wsRef.current?.readyState ===
+      WebSocket.OPEN
+    ) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'stop',
+        })
+      );
+    }
+  };
+
+  const toggleRecording = async () => {
+    if (isRecording) {
+      await stopRecording();
+    } else {
+      await startRecording();
+    }
+  };
 
   return (
     <div className="container">
@@ -471,4 +393,3 @@ export default function App() {
     </div>
   );
 }
-
