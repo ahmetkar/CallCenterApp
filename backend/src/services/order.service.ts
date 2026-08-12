@@ -9,23 +9,30 @@ import { CargoRepository } from '../db/repositories/cargo.repository';
 
 export class OrderService {
   async createOrder(data: {
-    productName: string;
-    quantity: number;
     customerName: string;
     address: string;
+    notes?: string;
+    items: Array<{
+      productName: string;
+      quantity: number;
+    }>;
   }) {
-    const queryRunner: QueryRunner =
+    const queryRunner =
       AppDataSource.createQueryRunner();
 
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
       const productRepo =
-        new ProductRepository();
+        new ProductRepository(
+          queryRunner.manager
+        );
 
       const customerRepo =
-        new CustomerRepository();
+        new CustomerRepository(
+          queryRunner.manager
+        );
 
       const orderRepo =
         new OrderRepository(
@@ -37,25 +44,6 @@ export class OrderService {
           queryRunner.manager
         );
 
-      const product =
-        await productRepo.getExact(
-          data.productName
-        );
-
-      if (!product) {
-        throw new Error(
-          'Ürün bulunamadı'
-        );
-      }
-
-      if (
-        product.stock < data.quantity
-      ) {
-        throw new Error(
-          'Yetersiz stok'
-        );
-      }
-
       const customer =
         await customerRepo.findOrCreate(
           {
@@ -66,68 +54,136 @@ export class OrderService {
           }
         );
 
-      product.stock -= data.quantity;
+      const orderItems: Array<{
+        productId: number;
+        quantity: number;
+        unitPrice: number;
+        totalPrice: number;
+      }> = [];
 
-      await queryRunner.manager.save(
-        product
-      );
+      let orderTotal = 0;
 
-      const unitPrice =
-        Number(product.price);
+      for (const item of data.items) {
+        const product =
+          await productRepo.getExact(
+            item.productName
+          );
 
-      const totalPrice =
-        unitPrice *
-        data.quantity;
+        if (!product) {
+          throw new Error(
+            `Ürün bulunamadı: ${item.productName}`
+          );
+        }
 
-      const order =
-        await orderRepo.createOrder(
-          {
-            customerId:
-              customer.id,
-            productId: product.id,
-            quantity:
-              data.quantity,
-            unitPrice,
-            totalPrice,
-            customerName:
-              data.customerName,
-            address:
-              data.address,
-          }
+        await productRepo.decreaseStock(
+          product.id,
+          item.quantity
         );
+
+        const unitPrice =
+          Number(product.price);
+
+        const totalPrice =
+          unitPrice *
+          item.quantity;
+
+        orderTotal += totalPrice;
+
+        orderItems.push({
+          productId:
+            product.id,
+          quantity:
+            item.quantity,
+          unitPrice,
+          totalPrice,
+        });
+      }
+
+            const order =
+        await orderRepo.createOrder({
+          customerId: customer.id,
+          customerName: data.customerName,
+          address: data.address,
+          totalPrice: orderTotal,
+          notes: data.notes,
+          items: orderItems,
+        });
 
       const cargo =
         await cargoRepo.createCargo(
           order.id
         );
 
+      // İlişkileri yükle
+      const savedOrder =
+        await orderRepo.getOrderWithDetails(
+          order.id
+        );
+
+      if (!savedOrder) {
+        throw new Error(
+          'Sipariş kaydedildi ancak tekrar yüklenemedi'
+        );
+      }
+
       await queryRunner.commitTransaction();
 
-      return {
-        success: true,
-        orderId: order.id,
+  return {
+    success: true,
+    orderId: savedOrder.id,
+    customerName:
+      savedOrder.customerName,
+    address:
+      savedOrder.address,
+    totalPrice: Number(
+      savedOrder.totalPrice
+    ),
+    items: savedOrder.items.map(
+      item => ({
+        productId:
+          item.productId,
         productName:
-          product.name,
+          item.product.name,
         quantity:
-          order.quantity,
-        unitPrice,
-        totalPrice,
-        customerName:
-          order.customerName,
-        address:
-          order.address,
-        cargoTracking:
-          cargo.trackingNumber,
-        cargoCompany:
-          cargo.company,
-        status: order.status,
-      };
+          item.quantity,
+        unitPrice:
+          Number(
+            item.unitPrice
+          ),
+        totalPrice:
+          Number(
+            item.totalPrice
+          ),
+      })
+    ),
+    cargoTracking:
+      cargo.trackingNumber,
+    cargoCompany:
+      cargo.company,
+    status:
+      savedOrder.status,
+  };
+
+
     } catch (err) {
-      await queryRunner.rollbackTransaction();
+      console.error(
+        'ORDER SERVICE ERROR:',
+        err
+      );
+
+      if (
+        queryRunner.isTransactionActive
+      ) {
+        await queryRunner.rollbackTransaction();
+      }
 
       throw err;
     } finally {
-      await queryRunner.release();
+      if (
+        !queryRunner.isReleased
+      ) {
+        await queryRunner.release();
+      }
     }
   }
 
@@ -150,21 +206,31 @@ export class OrderService {
 
     return {
       orderId: order.id,
-      productName:
-        order.product.name,
-      quantity: order.quantity,
-      unitPrice: Number(
-        order.unitPrice
-      ),
-      totalPrice: Number(
-        order.totalPrice
-      ),
       customerName:
         order.customerName,
       address: order.address,
+      totalPrice: Number(
+        order.totalPrice
+      ),
       status: order.status,
       createdAt:
         order.createdAt,
+      items: order.items.map(
+        item => ({
+          productName:
+            item.product.name,
+          quantity:
+            item.quantity,
+          unitPrice:
+            Number(
+              item.unitPrice
+            ),
+          totalPrice:
+            Number(
+              item.totalPrice
+            ),
+        })
+      ),
       cargo: order.cargo
         ? {
             trackingNumber:
@@ -208,3 +274,4 @@ export class OrderService {
     return orderRepo.listLatest();
   }
 }
+

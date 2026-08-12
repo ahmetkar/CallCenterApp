@@ -1,4 +1,6 @@
+
 import { EntityManager } from 'typeorm';
+
 import { Cargo } from '../entities/cargo.entity';
 import { BaseRepository } from './base.repository';
 
@@ -15,19 +17,17 @@ export class CargoRepository extends BaseRepository<Cargo> {
   }
 
   private generateTrackingNumber() {
-   const max = 1000000
-   const min = 1000
     const random = Math.floor(
-      Math.random() * (max - min +1)
+      100000000 + Math.random() * 900000000
     );
 
-    return `${random}`;
+    return random.toString();
   }
 
   async createCargo(
     orderId: number
   ) {
-    return this.create({
+    const cargo = this.repo.create({
       orderId,
       trackingNumber:
         this.generateTrackingNumber(),
@@ -35,6 +35,8 @@ export class CargoRepository extends BaseRepository<Cargo> {
         'Yurtiçi Kargo',
       status: 'Preparing',
     });
+
+    return this.repo.save(cargo);
   }
 
   async getByOrderId(
@@ -44,7 +46,9 @@ export class CargoRepository extends BaseRepository<Cargo> {
       where: { orderId },
       relations: {
         order: {
-          product: true,
+          items: {
+            product: true,
+          },
           customer: true,
         },
       },
@@ -60,7 +64,9 @@ export class CargoRepository extends BaseRepository<Cargo> {
       },
       relations: {
         order: {
-          product: true,
+          items: {
+            product: true,
+          },
           customer: true,
         },
       },
@@ -80,4 +86,18 @@ export class CargoRepository extends BaseRepository<Cargo> {
       orderId
     );
   }
+
+  async existsTrackingNumber(
+    trackingNumber: string
+  ) {
+    const count =
+      await this.repo.count({
+        where: {
+          trackingNumber,
+        },
+      });
+
+    return count > 0;
+  }
 }
+

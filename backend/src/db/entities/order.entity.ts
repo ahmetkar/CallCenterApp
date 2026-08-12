@@ -3,15 +3,16 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   OneToOne,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
 
-import { Product } from './product.entity';
 import { Customer } from './customer.entity';
 import { Cargo } from './cargo.entity';
+import { OrderItem } from './order-item.entity';
 
 @Entity('Orders')
 export class Order {
@@ -27,26 +28,6 @@ export class Order {
     nullable: true,
   })
   customerId?: number;
-
-  @Column({
-    name: 'ProductId',
-    type: 'int',
-  })
-  productId!: number;
-
-  @Column({
-    name: 'Quantity',
-    type: 'int',
-  })
-  quantity!: number;
-
-  @Column({
-    name: 'UnitPrice',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-  })
-  unitPrice!: number;
 
   @Column({
     name: 'TotalPrice',
@@ -97,26 +78,26 @@ export class Order {
   updatedAt!: Date;
 
   @ManyToOne(
-    () => Product,
-    (product) => product.orders
-  )
-  @JoinColumn({
-    name: 'ProductId',
-  })
-  product!: Product;
-
-  @ManyToOne(
     () => Customer,
-    (customer) => customer.orders
+    customer => customer.orders
   )
   @JoinColumn({
     name: 'CustomerId',
   })
   customer?: Customer;
 
+  @OneToMany(
+    () => OrderItem,
+    item => item.order,
+    {
+      cascade: true,
+    }
+  )
+  items!: OrderItem[];
+
   @OneToOne(
     () => Cargo,
-    (cargo) => cargo.order
+    cargo => cargo.order
   )
   cargo?: Cargo;
 }

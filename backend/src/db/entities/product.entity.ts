@@ -7,7 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-import { Order } from './order.entity';
+import { OrderItem } from './order-item.entity';
 
 @Entity('Products')
 export class Product {
@@ -91,8 +91,8 @@ export class Product {
   updatedAt!: Date;
 
   @OneToMany(
-    () => Order,
-    (order) => order.product
+    () => OrderItem,
+    item => item.product
   )
-  orders!: Order[];
+  orderItems!: OrderItem[];
 }

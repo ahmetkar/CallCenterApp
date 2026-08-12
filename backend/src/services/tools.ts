@@ -1,3 +1,4 @@
+
 import {
   Type,
   FunctionDeclaration,
@@ -7,129 +8,169 @@ import { ProductService } from './product.service';
 import { OrderService } from './order.service';
 import { CargoService } from './cargo.service';
 
-const productService = new ProductService();
-const orderService = new OrderService();
-const cargoService = new CargoService();
+const productService =
+  new ProductService();
 
-export const toolDefinitions: FunctionDeclaration[] = [
-  {
-    name: 'searchProduct',
-    description:
-      'Tek bir ürünü veya benzer ürünleri ara. Sipariş oluşturmadan önce ürün doğrulamak için kullan.',
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        productName: {
-          type: Type.STRING,
-          description: 'Aranacak ürün adı',
+const orderService =
+  new OrderService();
+
+const cargoService =
+  new CargoService();
+
+export const toolDefinitions: FunctionDeclaration[] =
+  [
+    {
+      name: 'searchProduct',
+      description:
+        'Tek bir ürünü veya benzer ürünleri ara. Sipariş oluşturmadan önce ürün doğrulamak için kullan.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          productName: {
+            type: Type.STRING,
+            description:
+              'Aranacak ürün adı',
+          },
         },
-      },
-      required: ['productName'],
-    },
-  },
-  {
-  name: 'listProducts',
-  description:
-    'Aktif ürünleri filtreleyerek listeler.',
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      category: {
-        type: Type.STRING,
-        description:
-          'Kategori veya ürün grubu (örneğin klavye, mouse, monitör)',
-      },
-      inStock: {
-        type: Type.BOOLEAN,
-        description:
-          'Sadece stokta olan ürünler',
-      },
-      maxPrice: {
-        type: Type.NUMBER,
-        description:
-          'Maksimum fiyat',
+        required: [
+          'productName',
+        ],
       },
     },
-  },
-},
-  {
-    name: 'createOrder',
-    description:
-      'Yeni sipariş oluşturur ve otomatik kargo kaydı açar.',
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        product: {
-          type: Type.STRING,
-          description: 'Ürün adı',
-        },
-        quantity: {
-          type: Type.NUMBER,
-          description: 'Sipariş adedi',
-        },
-        customerName: {
-          type: Type.STRING,
-          description: 'Müşteri adı',
-        },
-        address: {
-          type: Type.STRING,
-          description: 'Teslimat adresi',
+    {
+      name: 'listProducts',
+      description:
+        'Aktif ürünleri filtreleyerek listeler.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          category: {
+            type: Type.STRING,
+            description:
+              'Kategori veya ürün grubu (örneğin klavye, mouse, monitör)',
+          },
+          inStock: {
+            type: Type.BOOLEAN,
+            description:
+              'Sadece stokta olan ürünler',
+          },
+          maxPrice: {
+            type: Type.NUMBER,
+            description:
+              'Maksimum fiyat',
+          },
         },
       },
-      required: [
-        'product',
-        'quantity',
-        'customerName',
-        'address',
-      ],
     },
-  },
-  {
-    name: 'checkOrderStatus',
-    description:
-      'Sipariş durumunu getirir.',
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        orderId: {
-          type: Type.NUMBER,
-          description: 'Sipariş numarası',
+    {
+      name: 'createOrder',
+      description:
+        'Bir veya birden fazla üründen oluşan yeni sipariş oluşturur ve otomatik kargo kaydı açar.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          customerName: {
+            type: Type.STRING,
+            description:
+              'Müşteri adı',
+          },
+          address: {
+            type: Type.STRING,
+            description:
+              'Teslimat adresi',
+          },
+          notes: {
+            type: Type.STRING,
+            description:
+              'Sipariş notu',
+          },
+          items: {
+            type: Type.ARRAY,
+            description:
+              'Sipariş edilecek ürünler',
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                product: {
+                  type: Type.STRING,
+                  description:
+                    'Ürün adı',
+                },
+                quantity: {
+                  type: Type.NUMBER,
+                  description:
+                    'Sipariş adedi',
+                },
+              },
+              required: [
+                'product',
+                'quantity',
+              ],
+            },
+          },
         },
+        required: [
+          'customerName',
+          'address',
+          'items',
+        ],
       },
-      required: ['orderId'],
     },
-  },
-  {
-    name: 'checkCargoStatus',
-    description:
-      'Sipariş numarasına göre kargo durumunu getirir.',
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        orderId: {
-          type: Type.NUMBER,
-          description: 'Sipariş numarası',
+    {
+      name: 'checkOrderStatus',
+      description:
+        'Sipariş durumunu getirir.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          orderId: {
+            type: Type.NUMBER,
+            description:
+              'Sipariş numarası',
+          },
         },
+        required: [
+          'orderId',
+        ],
       },
-      required: ['orderId'],
     },
-  },
-  {
-    name: 'checkCargoByTrackingNumber',
-    description:
-      'Takip numarasına göre kargo durumunu getirir.',
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        trackingNumber: {
-          type: Type.STRING,
-          description: 'Kargo takip numarası',
+    {
+      name: 'checkCargoStatus',
+      description:
+        'Sipariş numarasına göre kargo durumunu getirir.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          orderId: {
+            type: Type.NUMBER,
+            description:
+              'Sipariş numarası',
+          },
         },
+        required: [
+          'orderId',
+        ],
       },
-      required: ['trackingNumber'],
     },
-  },
-];
+    {
+      name: 'checkCargoByTrackingNumber',
+      description:
+        'Takip numarasına göre kargo durumunu getirir.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          trackingNumber: {
+            type: Type.STRING,
+            description:
+              'Kargo takip numarası',
+          },
+        },
+        required: [
+          'trackingNumber',
+        ],
+      },
+    },
+  ];
 
 export async function executeTool(
   name: string,
@@ -143,7 +184,10 @@ export async function executeTool(
             args.productName
           );
 
-        if (products.length === 0) {
+        if (
+          products.length ===
+          0
+        ) {
           return {
             success: false,
             errorCode:
@@ -174,21 +218,33 @@ export async function executeTool(
 
         return {
           success: true,
-          count: products.length,
+          count:
+            products.length,
           products,
         };
       }
 
       case 'createOrder': {
-        return await orderService.createOrder({
-          productName:
-            args.product,
-          quantity:
-            Number(args.quantity),
-          customerName:
-            args.customerName,
-          address: args.address,
-        });
+        return await orderService.createOrder(
+          {
+            customerName:
+              args.customerName,
+            address:
+              args.address,
+            notes: args.notes,
+            items:
+              args.items.map(
+                (item: any) => ({
+                  productName:
+                    item.product,
+                  quantity:
+                    Number(
+                      item.quantity
+                    ),
+                })
+              ),
+          }
+        );
       }
 
       case 'checkOrderStatus': {
@@ -196,7 +252,9 @@ export async function executeTool(
           success: true,
           order:
             await orderService.checkOrderStatus(
-              Number(args.orderId)
+              Number(
+                args.orderId
+              )
             ),
         };
       }
@@ -206,7 +264,9 @@ export async function executeTool(
           success: true,
           cargo:
             await cargoService.checkCargoStatus(
-              Number(args.orderId)
+              Number(
+                args.orderId
+              )
             ),
         };
       }
@@ -306,3 +366,4 @@ export async function executeTool(
     };
   }
 }
+

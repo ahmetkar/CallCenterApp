@@ -1,10 +1,22 @@
-import { ILike } from 'typeorm';
+
+import {
+  EntityManager,
+  ILike,
+} from 'typeorm';
+
 import { Product } from '../entities/product.entity';
 import { BaseRepository } from './base.repository';
 
 export class ProductRepository extends BaseRepository<Product> {
-  constructor() {
+  constructor(
+    private manager?: EntityManager
+  ) {
     super(Product);
+
+    if (manager) {
+      this.repository =
+        manager.getRepository(Product);
+    }
   }
 
   async search(
@@ -24,155 +36,230 @@ export class ProductRepository extends BaseRepository<Product> {
     });
   }
 
- async listActive(filters?: {
-  category?: string;
-  inStock?: boolean;
-  maxPrice?: number;
-}) {
-  const qb =
-    this.repo.createQueryBuilder(
-      'p'
+  async listActive(filters?: {
+    category?: string;
+    inStock?: boolean;
+    maxPrice?: number;
+  }) {
+    const qb =
+      this.repo.createQueryBuilder(
+        'p'
+      );
+
+    qb.where(
+      'p."IsActive" = :active',
+      {
+        active: true,
+      }
     );
 
-  qb.where(
-    'p."IsActive" = :active',
-    {
-      active: true,
+    if (filters?.category) {
+      qb.andWhere(
+        'p."Name" ILIKE :category',
+        {
+          category: `%${filters.category}%`,
+        }
+      );
     }
-  );
 
-  if (filters?.category) {
-    qb.andWhere(
-      'p."Name" ILIKE :category',
-      {
-        category: `%${filters.category}%`,
-      }
+    if (filters?.inStock) {
+      qb.andWhere(
+        'p."Stock" > 0'
+      );
+    }
+
+    if (
+      filters?.maxPrice !==
+      undefined
+    ) {
+      qb.andWhere(
+        'p."Price" <= :maxPrice',
+        {
+          maxPrice:
+            filters.maxPrice,
+        }
+      );
+    }
+
+    qb.orderBy(
+      'p."Name"',
+      'ASC'
     );
+
+    return qb.getMany();
   }
 
-  if (filters?.inStock) {
-    qb.andWhere(
-      'p."Stock" > 0'
-    );
-  }
-
-  if (
-    filters?.maxPrice !==
-    undefined
+  async getExact(
+    name: string
   ) {
-    qb.andWhere(
-      'p."Price" <= :maxPrice',
-      {
-        maxPrice:
-          filters.maxPrice,
-      }
-    );
+    const product =
+      await this.repo
+        .createQueryBuilder('p')
+        .where(
+          'p."IsActive" = true'
+        )
+        .andWhere(
+          `
+          similarity(
+            p."Name",
+            :name
+          ) > 0.25
+          `,
+          { name }
+        )
+        .orderBy(
+          `
+          similarity(
+            p."Name",
+            :name
+          )
+          `,
+          'DESC'
+        )
+        .setParameter(
+          'name',
+          name
+        )
+        .getOne();
+
+    if (product) {
+      return product;
+    }
+
+    return this.repo.findOne({
+      where: {
+        name: ILike(
+          `%${name}%`
+        ),
+        isActive: true,
+      },
+    });
   }
-
-  qb.orderBy(
-    'p."Name"',
-    'ASC'
-  );
-
-  return qb.getMany();
-}
-
- async getExact(
-  name: string
-) {
-  const product =
-    await this.repo
-      .createQueryBuilder('p')
-      .where(
-        'p."IsActive" = true'
-      )
-      .andWhere(
-        `
-      similarity(
-        p."Name",
-        :name
-      ) > 0.25
-    `,
-        { name }
-      )
-      .orderBy(
-        `
-      similarity(
-        p."Name",
-        :name
-      )
-    `,
-        'DESC'
-      )
-      .setParameter(
-        'name',
-        name
-      )
-      .getOne();
-
-  if (product) {
-    return product;
-  }
-
-  return this.repo.findOne({
-    where: {
-      name: ILike(
-        `%${name}%`
-      ),
-      isActive: true,
-    },
-  });
-}
 
   async decreaseStock(
     productId: number,
     quantity: number
   ) {
-    const product =
-      await this.findById(
-        productId
-      );
-
-    if (!product) {
-      throw new Error(
-        'Ürün bulunamadı'
-      );
-    }
+    const result =
+      await this.repo
+        .createQueryBuilder()
+        .update(Product)
+        .set({
+          stock: () =>
+            `"Stock" - ${quantity}`,
+        })
+        .where(
+          '"Id" = :productId',
+          { productId }
+        )
+        .andWhere(
+          '"Stock" >= :quantity',
+          { quantity }
+        )
+        .returning('*')
+        .execute();
 
     if (
-      product.stock < quantity
+      result.affected === 0
     ) {
       throw new Error(
-        'Yetersiz stok'
+        'Yetersiz stok veya ürün bulunamadı'
       );
     }
 
-    product.stock -= quantity;
-
-    await this.repo.save(product);
-
-    return product;
+    return result.raw[0] as Product;
   }
 
   async increaseStock(
     productId: number,
     quantity: number
   ) {
-    const product =
-      await this.findById(
-        productId
-      );
+    const result =
+      await this.repo
+        .createQueryBuilder()
+        .update(Product)
+        .set({
+          stock: () =>
+            `"Stock" + ${quantity}`,
+        })
+        .where(
+          '"Id" = :productId',
+          { productId }
+        )
+        .returning('*')
+        .execute();
 
-    if (!product) {
+    if (
+      result.affected === 0
+    ) {
       throw new Error(
         'Ürün bulunamadı'
       );
     }
 
-    product.stock += quantity;
+    return result.raw[0] as Product;
+  }
 
-    await this.repo.save(product);
+  async decreaseStocks(
+    items: Array<{
+      productId: number;
+      quantity: number;
+    }>
+  ) {
+    const updatedProducts: Product[] =
+      [];
 
-    return product;
+    for (const item of items) {
+      const product =
+        await this.decreaseStock(
+          item.productId,
+          item.quantity
+        );
+
+      updatedProducts.push(
+        product
+      );
+    }
+
+    return updatedProducts;
+  }
+
+  async increaseStocks(
+    items: Array<{
+      productId: number;
+      quantity: number;
+    }>
+  ) {
+    const updatedProducts: Product[] =
+      [];
+
+    for (const item of items) {
+      const product =
+        await this.increaseStock(
+          item.productId,
+          item.quantity
+        );
+
+      updatedProducts.push(
+        product
+      );
+    }
+
+    return updatedProducts;
+  }
+
+  async getByIds(
+    productIds: number[]
+  ) {
+    return this.repo
+      .createQueryBuilder('p')
+      .where(
+        'p."Id" IN (:...ids)',
+        {
+          ids: productIds,
+        }
+      )
+      .getMany();
   }
 }
+

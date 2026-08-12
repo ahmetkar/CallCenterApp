@@ -1,22 +1,54 @@
-import { ILike } from 'typeorm';
+
+import {
+  EntityManager,
+  ILike,
+} from 'typeorm';
+
 import { Customer } from '../entities/customer.entity';
 import { BaseRepository } from './base.repository';
 
 export class CustomerRepository extends BaseRepository<Customer> {
-  constructor() {
+  constructor(
+    private manager?: EntityManager
+  ) {
     super(Customer);
+
+    if (manager) {
+      this.repository =
+        manager.getRepository(Customer);
+    }
   }
 
-  async findByName(
-    fullName: string
-  ) {
-    return this.repo.findOne({
-      where: {
-        fullName: ILike(
-          fullName
-        ),
-      },
-    });
+  async findOrCreate(data: {
+    fullName: string;
+    defaultAddress: string;
+    phone?: string;
+    email?: string;
+  }) {
+    let customer =
+      await this.repo.findOne({
+        where: {
+          fullName: ILike(
+            data.fullName
+          ),
+        },
+      });
+
+    if (customer) {
+      return customer;
+    }
+
+    customer =
+      this.repo.create({
+        fullName:
+          data.fullName,
+        defaultAddress:
+          data.defaultAddress,
+        phone: data.phone,
+        email: data.email,
+      });
+
+    return this.repo.save(customer);
   }
 
   async search(
@@ -28,34 +60,28 @@ export class CustomerRepository extends BaseRepository<Customer> {
           `%${keyword}%`
         ),
       },
+      order: {
+        fullName: 'ASC',
+      },
       take: 20,
     });
   }
 
-  async createCustomer(data: {
-    fullName: string;
-    phone?: string;
-    email?: string;
-    defaultAddress?: string;
-  }) {
-    return this.create(data);
-  }
+  async updateAddress(
+    customerId: number,
+    address: string
+  ) {
+    await this.repo.update(
+      { id: customerId },
+      {
+        defaultAddress:
+          address,
+      }
+    );
 
-  async findOrCreate(data: {
-    fullName: string;
-    phone?: string;
-    email?: string;
-    defaultAddress?: string;
-  }) {
-    const existing =
-      await this.findByName(
-        data.fullName
-      );
-
-    if (existing) {
-      return existing;
-    }
-
-    return this.createCustomer(data);
+    return this.findById(
+      customerId
+    );
   }
 }
+

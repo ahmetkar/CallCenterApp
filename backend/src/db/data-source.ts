@@ -5,6 +5,7 @@ import { Product } from './entities/product.entity';
 import { Customer } from './entities/customer.entity';
 import { Order } from './entities/order.entity';
 import { Cargo } from './entities/cargo.entity';
+import { OrderItem } from './entities/order-item.entity';
 
 export const AppDataSource =
   new DataSource({
@@ -39,6 +40,7 @@ export const AppDataSource =
       Customer,
       Order,
       Cargo,
+      OrderItem
     ],
   });
 

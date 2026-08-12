@@ -1,62 +1,74 @@
+
 import { ProductRepository } from '../db/repositories/product.repository';
 
 export class ProductService {
   private products =
     new ProductRepository();
 
+  async listProducts(filters?: {
+    category?: string;
+    inStock?: boolean;
+    maxPrice?: number;
+  }) {
+    const products =
+      await this.products.listActive(
+        filters
+      );
 
- async listProducts(filters?: {
-  category?: string;
-  inStock?: boolean;
-  maxPrice?: number;
-}) {
-  const productRepo =
-    new ProductRepository();
-
-  const products =
-    await productRepo.listActive(
-      filters
+    return products.map(
+      product => ({
+        id: product.id,
+        name: product.name,
+        description:
+          product.description,
+        price: Number(
+          product.price
+        ),
+        currency:
+          product.currency,
+        stock: product.stock,
+        isActive:
+          product.isActive,
+      })
     );
-
-  return products.map(
-    (p) => ({
-      id: p.id,
-      name: p.name,
-      price: Number(
-        p.price
-      ),
-      currency:
-        p.currency,
-      stock: p.stock,
-    })
-  );
-}
+  }
 
   async searchProducts(
     keyword: string
   ) {
-    const result =
+    const products =
       await this.products.search(
         keyword
       );
 
-    return result.map((p) => ({
-      id: p.id,
-      name: p.name,
-      description:
-        p.description,
-      sku: p.sku,
-      barcode: p.barcode,
-      price: Number(p.price),
-      currency: p.currency,
-      stock: p.stock,
-      isActive: p.isActive,
-    }));
+    return products.map(
+      product => ({
+        id: product.id,
+        name: product.name,
+        description:
+          product.description,
+        sku: product.sku,
+        barcode:
+          product.barcode,
+        price: Number(
+          product.price
+        ),
+        currency:
+          product.currency,
+        stock: product.stock,
+        isActive:
+          product.isActive,
+      })
+    );
   }
 
-  async getProduct(id: number) {
+  async getProduct(
+    id: number
+  ) {
     const product =
-      await this.products.findById(id);
+      await this.products.findById(
+        id
+      );
 
     if (!product) {
       throw new Error(
@@ -70,9 +82,13 @@ export class ProductService {
       description:
         product.description,
       sku: product.sku,
-      barcode: product.barcode,
-      price: Number(product.price),
-      currency: product.currency,
+      barcode:
+        product.barcode,
+      price: Number(
+        product.price
+      ),
+      currency:
+        product.currency,
       stock: product.stock,
       isActive:
         product.isActive,
@@ -93,6 +109,45 @@ export class ProductService {
       );
     }
 
-    return product;
+    return {
+      id: product.id,
+      name: product.name,
+      description:
+        product.description,
+      sku: product.sku,
+      barcode:
+        product.barcode,
+      price: Number(
+        product.price
+      ),
+      currency:
+        product.currency,
+      stock: product.stock,
+      isActive:
+        product.isActive,
+    };
+  }
+
+  async getProductsByIds(
+    productIds: number[]
+  ) {
+    const products =
+      await this.products.getByIds(
+        productIds
+      );
+
+    return products.map(
+      product => ({
+        id: product.id,
+        name: product.name,
+        price: Number(
+          product.price
+        ),
+        currency:
+          product.currency,
+        stock: product.stock,
+      })
+    );
   }
 }
+

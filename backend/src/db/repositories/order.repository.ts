@@ -1,6 +1,4 @@
-import {
-  EntityManager,
-} from 'typeorm';
+import { EntityManager } from 'typeorm';
 
 import { Order } from '../entities/order.entity';
 import { BaseRepository } from './base.repository';
@@ -19,27 +17,40 @@ export class OrderRepository extends BaseRepository<Order> {
 
   async createOrder(data: {
     customerId?: number;
-    productId: number;
-    quantity: number;
-    unitPrice: number;
-    totalPrice: number;
     customerName: string;
     address: string;
+    totalPrice: number;
+    notes?: string;
+    items: Array<{
+      productId: number;
+      quantity: number;
+      unitPrice: number;
+      totalPrice: number;
+    }>;
   }) {
-    return this.create({
+    const order = this.repo.create({
       customerId:
         data.customerId,
-      productId: data.productId,
-      quantity: data.quantity,
-      unitPrice:
-        data.unitPrice,
-      totalPrice:
-        data.totalPrice,
       customerName:
         data.customerName,
       address: data.address,
+      totalPrice:
+        data.totalPrice,
+      notes: data.notes,
       status: 'Preparing',
+      items: data.items.map(item => ({
+        productId:
+          item.productId,
+        quantity:
+          item.quantity,
+        unitPrice:
+          item.unitPrice,
+        totalPrice:
+          item.totalPrice,
+      })),
     });
+
+    return this.repo.save(order);
   }
 
   async getOrderWithDetails(
@@ -50,10 +61,12 @@ export class OrderRepository extends BaseRepository<Order> {
         id: orderId,
       },
       relations: {
-        product: true,
+        items: {
+          product: true,
+        },
         customer: true,
         cargo: true,
-      },
+      }
     });
   }
 
@@ -76,7 +89,9 @@ export class OrderRepository extends BaseRepository<Order> {
   ) {
     return this.repo.find({
       relations: {
-        product: true,
+        items: {
+          product: true,
+        },
         cargo: true,
       },
       order: {
@@ -92,7 +107,9 @@ export class OrderRepository extends BaseRepository<Order> {
     return this.repo.find({
       where: { customerId },
       relations: {
-        product: true,
+        items: {
+          product: true,
+        },
         cargo: true,
       },
       order: {
@@ -100,4 +117,23 @@ export class OrderRepository extends BaseRepository<Order> {
       },
     });
   }
+
+  async getOrderItems(
+    orderId: number
+  ) {
+    const order =
+      await this.repo.findOne({
+        where: {
+          id: orderId,
+        },
+        relations: {
+          items: {
+            product: true,
+          },
+        },
+      });
+
+    return order?.items ?? [];
+  }
 }
+
