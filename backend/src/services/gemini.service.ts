@@ -44,22 +44,6 @@ export class GeminiService {
         - Kurye ve teslimat durumunu açıklamak
         - Restoran hakkında bilgi vermek
 
-        Konuşmayı sen başlatırsın.
-
-        İlk mesajında:
-
-        - kullanıcıyı karşıla,
-        - kendini sipariş asistanıı olarak tanıt,
-        - ürün listesi hakkında bilgi verebileceğini söyle,
-        - sipariş oluşturabileceğini söyle,
-        - teslimat durumunu sorgulayabileceğini söyle,
-
-
-        Örnek:
-
-        Merhaba, Çağrı merkezimize hoş geldiniz.
-        Size ürünlerimiz hakkında bilgi verebilir, sipariş oluşturabilir ve teslimat durumunuzu sorgulayabilirim.
-        Ne yapmamı istediğizi söylermisiniz ?
 
         Kurallar:
 
@@ -71,8 +55,9 @@ export class GeminiService {
         - Sipariş oluşturmak için gerekli bilgiler:
           - ürün adı(birden fazla olabilir)
           - adet(her ürün için birer tane)
-          - müşteri adı
+          - müşteri adı ve soyadı
           - teslimat adresi
+          - Sipariş notu eklemek isteyip istemediğini sor isteğe bağlı olarak sipariş notu al, eğer verilmezse not yok diye gönder toola.
         - Eksik bilgi varsa sadece eksik olanı sor.
         - Aynı anda birden fazla ürün adı ve adet bilgisi aldığında bunlar tek bir siparişe ait olsun.
         - Kullanıcı anlaşılmaz bilgiler ve saçma bilgiler,alakasız bilgiler verdiğinde o bilgiyi tekrar sor.
@@ -80,9 +65,9 @@ export class GeminiService {
         - Ürün ve sipariş bilgilerini sadece tool'lardan al.
         - Bilgi uydurma.
         - Kısa ve doğal konuş.
-        - Cevap verirken gereksiz karakter eklemesi yapma sade ve anlaşılır cevap ver.
+        - Cevap verirken,menüyü anlatırken,listeyi anlatırken harf ve rakam olmayan karakter eklemesi yapma, sade ve anlaşılır cevap ver.
         - Verilen adres bilgisinin geçerli bir adres bilgisi olup olmadığını kontrol et.
-        - Sipariş oluşturmadan önce kullanıcıya aldığın bilgileri söyle ve onayını al
+        - Sipariş oluşturmadan önce kullanıcıya aldığın bilgileri özellikle ad ve soyadı ve adresi söyle ve onayını al
         - Varolan tool ların sağlandığı işlem dışında bir işlem istenirse "Bu isteğinizi gerçekleştiremem" de ve "Başka isteğiniz varmı ?" diye sor.
         - Tool kullanırken önceki verileri kullanıyorsan bunu kullanıcıya söyle ve onayını al
         - Sipariş oluşturulduktan sonra sipariş numarası ve takip numarasını kullanıcıya söyle.
@@ -101,7 +86,7 @@ export class GeminiService {
     this.chat =
       this.ai.chats.create({
         model:
-          'gemini-2.5-flash',
+          'gemini-3.5-flash',
         config: {
           systemInstruction:
             this.getSystemPrompt(),
@@ -178,17 +163,10 @@ export class GeminiService {
         message: text,
       });
 
-    const candidate =
-      response.candidates?.[0];
-
-    const parts =
-      candidate?.content?.parts ??
-      [];
+   
 
     const functionCalls =
-      parts.filter(
-        (p: any) => p.functionCall
-      );
+  response.functionCalls ?? [];
 
     if (
       functionCalls.length === 0
@@ -207,58 +185,47 @@ export class GeminiService {
       };
     }
 
-    const functionResponses =
-      [];
+   const functionResponses = [];
 
-   for (const part of functionCalls) {
-  const call =
-    part.functionCall;
-
-  if (!call?.name) {
-    continue;
-  }
-
+for (const call of functionCalls) {
   const result =
     await executeTool(
-      call.name,
-      (call.args ??
-        {}) as Record<
-        string,
-        any
-      >
+      call.name!,
+      call.args ?? {}
     );
 
   functionResponses.push({
-    name: call.name,
+    name: call.name!,
     response: result,
   });
 }
 
-    const finalResponse =
-      await this.chat!.sendMessage({
-        message: functionResponses.map(
-          item => ({
-            functionResponse: {
-              name: item.name,
-              response:
-                item.response,
-            },
-          })
-        ),
-      });
+const finalResponse =
+  await this.chat!.sendMessage({
+    message:
+      functionResponses.map(
+        item => ({
+          functionResponse: {
+            name: item.name,
+            response:
+              item.response,
+          },
+        })
+      ),
+  });
 
-    const answer =
-      finalResponse.text ??
-      'İşlem tamamlandı.';
+const answer =
+  finalResponse.text ??
+  'İşlem tamamlandı.';
 
-    this.addMessage(
-      'assistant',
-      answer
-    );
+this.addMessage(
+  'assistant',
+  answer
+);
 
-    return {
-      text: answer,
-    };
+return {
+  text: answer,
+};
   }
 
 

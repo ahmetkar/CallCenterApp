@@ -7,9 +7,11 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
 
 import { Restaurant } from './restaurant.entity';
+import { Order } from './order.entity';
 
 export enum IntegrationProvider {
   UBER_EATS = 'UberEats',
@@ -116,5 +118,11 @@ export class IntegrationAccount {
     name: 'RestaurantId',
   })
   restaurant!: Restaurant;
+
+  @OneToMany(
+  () => Order,
+  order => order.integrationAccount
+)
+orders!: Order[];
 }
 

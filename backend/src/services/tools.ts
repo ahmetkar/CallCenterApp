@@ -85,18 +85,7 @@ export const toolDefinitions: FunctionDeclaration[] = [
   parameters: {
     type: Type.OBJECT,
     properties: {
-      provider: {
-        type: Type.STRING,
-        enum: [
-          'Internal',
-          'UberEats',
-          'DeliveryHero',
-        ],
-      },
       customerName: {
-        type: Type.STRING,
-      },
-      phone: {
         type: Type.STRING,
       },
       address: {
@@ -131,7 +120,6 @@ export const toolDefinitions: FunctionDeclaration[] = [
       },
     },
     required: [
-      'provider',
       'customerName',
       'address',
       'items',
@@ -249,14 +237,7 @@ export async function executeTool(
       }
 
       case 'createOrder': {
-        const provider =
-          args.provider ===
-          'UberEats'
-            ? OrderSource.UBER_EATS
-            : args.provider ===
-                'DeliveryHero'
-              ? OrderSource.DELIVERY_HERO
-              : OrderSource.INTERNAL;
+        const provider =OrderSource.INTERNAL;
 
               const result =
         await orderService.createOrder(
@@ -268,7 +249,7 @@ export async function executeTool(
               name:
                 args.customerName,
               phone:
-                args.phone,
+                "05461232121",
               address:
                 args.address,
               email:
@@ -291,7 +272,7 @@ export async function executeTool(
             notes: args.notes,
           }
         );
-
+        /*
         return {
           success: true,
           message:
@@ -306,6 +287,18 @@ export async function executeTool(
             result.totalPrice,
           trackingUrl:
             result.trackingUrl,
+        };*/
+
+        return {
+          success: true,
+          message:
+            'Sipariş başarıyla oluşturuldu.',
+          orderId:
+            result.orderId,
+          orderNumber:
+            result.orderNumber,
+          provider:
+            result.provider,
         };
       }
 

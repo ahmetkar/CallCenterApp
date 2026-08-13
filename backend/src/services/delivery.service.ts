@@ -33,7 +33,7 @@ export class DeliveryService {
         'Teslimat kaydı bulunamadı'
       );
     }
-
+    
     return {
       orderNumber:
         order.orderNumber,

@@ -274,7 +274,7 @@ export class Order {
   @ManyToOne(
     () => IntegrationAccount,
     integration => integration.orders,
-    {
+    { 
       nullable: true,
     }
   )

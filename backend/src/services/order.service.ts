@@ -265,6 +265,7 @@ export class OrderService {
         platformItems.push(item);
       }
 
+      /*
       let platformResult: any = null;
 
       if (
@@ -353,7 +354,7 @@ export class OrderService {
       });
 
       await queryRunner.commitTransaction();
-
+  
       return {
         success: true,
         orderId: order.id,
@@ -367,6 +368,31 @@ export class OrderService {
         trackingUrl:
           platformResult?.trackingUrl,
       };
+      */
+
+      await deliveryRepo.createDelivery({
+          orderId: order.id,
+          provider:
+            DeliveryProvider.INTERNAL,
+        });
+
+      await eventRepo.createEvent({
+        orderId: order.id,
+        provider: dto.provider,
+        eventType: 'order.created',
+        payload: dto as any,
+      });
+
+
+      await queryRunner.commitTransaction();
+       return {
+        success: true,
+        orderId: order.id,
+        orderNumber:
+          order.orderNumber,
+        provider: dto.provider,
+      };
+
     } catch (err) {
       await queryRunner.rollbackTransaction();
       throw err;

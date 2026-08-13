@@ -1,5 +1,13 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
+import { Product } from './entities/product.entity';
+import { IntegrationAccount } from './entities/integrationaccount.entity';
+import { OrderEvent } from './entities/orderevent.entity';
+import { Delivery } from './entities/delivery.entity';
+import { Order } from './entities/order.entity';
+import { OrderItem } from './entities/orderitem.entity';
+import { Customer } from './entities/customer.entity';
+import { Restaurant } from './entities/restaurant.entity';
 
 
 export const AppDataSource =
@@ -31,8 +39,16 @@ export const AppDataSource =
     logging: false,
 
     entities: [
-     
+      Restaurant,
+      Customer,
+      Order,
+      OrderItem,
+      Delivery,
+      OrderEvent,
+      IntegrationAccount,
+      Product
     ],
+   
   });
 
 export async function initializeDatabase() {
