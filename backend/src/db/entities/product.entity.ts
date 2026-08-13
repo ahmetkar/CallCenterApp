@@ -1,13 +1,17 @@
+
 import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
+  ManyToOne,
   OneToMany,
+  JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
 
-import { OrderItem } from './order-item.entity';
+import { Restaurant } from './restaurant.entity';
+import { OrderItem } from './orderitem.entity';
 
 @Entity('Products')
 export class Product {
@@ -18,9 +22,15 @@ export class Product {
   id!: number;
 
   @Column({
+    name: 'RestaurantId',
+    type: 'int',
+  })
+  restaurantId!: number;
+
+  @Column({
     name: 'Name',
     type: 'varchar',
-    length: 200,
+    length: 255,
   })
   name!: string;
 
@@ -32,11 +42,26 @@ export class Product {
   description?: string;
 
   @Column({
+    name: 'Category',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
+  category?: string;
+
+  @Column({
+    name: 'ExternalProductId',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
+  externalProductId?: string;
+
+  @Column({
     name: 'Sku',
     type: 'varchar',
     length: 100,
     nullable: true,
-    unique: true,
   })
   sku?: string;
 
@@ -72,11 +97,32 @@ export class Product {
   stock!: number;
 
   @Column({
+    name: 'PreparationTime',
+    type: 'int',
+    default: 10,
+  })
+  preparationTime!: number;
+
+  @Column({
     name: 'IsActive',
     type: 'boolean',
     default: true,
   })
   isActive!: boolean;
+
+  @Column({
+    name: 'IsAvailable',
+    type: 'boolean',
+    default: true,
+  })
+  isAvailable!: boolean;
+
+  @Column({
+    name: 'LastSyncedAt',
+    type: 'timestamp',
+    nullable: true,
+  })
+  lastSyncedAt?: Date;
 
   @CreateDateColumn({
     name: 'CreatedAt',
@@ -90,9 +136,22 @@ export class Product {
   })
   updatedAt!: Date;
 
+  @ManyToOne(
+    () => Restaurant,
+    restaurant => restaurant.products,
+    {
+      onDelete: 'CASCADE',
+    }
+  )
+  @JoinColumn({
+    name: 'RestaurantId',
+  })
+  restaurant!: Restaurant;
+
   @OneToMany(
     () => OrderItem,
     item => item.product
   )
   orderItems!: OrderItem[];
 }
+

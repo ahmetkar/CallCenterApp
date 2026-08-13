@@ -5,68 +5,67 @@ export class ProductService {
   private products =
     new ProductRepository();
 
-  async listProducts(filters?: {
-    category?: string;
-    inStock?: boolean;
-    maxPrice?: number;
-  }) {
+  async listProducts(
+    restaurantId: number,
+    filters?: {
+      category?: string;
+      inStock?: boolean;
+      maxPrice?: number;
+    }
+  ) {
     const products =
       await this.products.listActive(
+        restaurantId,
         filters
       );
 
-    return products.map(
-      product => ({
-        id: product.id,
-        name: product.name,
-        description:
-          product.description,
-        price: Number(
-          product.price
-        ),
-        currency:
-          product.currency,
-        stock: product.stock,
-        isActive:
-          product.isActive,
-      })
-    );
+    return products.map(p => ({
+      id: p.id,
+      name: p.name,
+      description:
+        p.description,
+      category: p.category,
+      price: Number(p.price),
+      currency:
+        p.currency,
+      stock: p.stock,
+      isAvailable:
+        p.isAvailable,
+    }));
   }
 
   async searchProducts(
+    restaurantId: number,
     keyword: string
   ) {
-    const products =
+    const result =
       await this.products.search(
+        restaurantId,
         keyword
       );
 
-    return products.map(
-      product => ({
-        id: product.id,
-        name: product.name,
-        description:
-          product.description,
-        sku: product.sku,
-        barcode:
-          product.barcode,
-        price: Number(
-          product.price
-        ),
-        currency:
-          product.currency,
-        stock: product.stock,
-        isActive:
-          product.isActive,
-      })
-    );
+    return result.map(p => ({
+      id: p.id,
+      name: p.name,
+      description:
+        p.description,
+      category: p.category,
+      price: Number(p.price),
+      currency:
+        p.currency,
+      stock: p.stock,
+      isAvailable:
+        p.isAvailable,
+    }));
   }
 
   async getProduct(
+    restaurantId: number,
     id: number
   ) {
     const product =
-      await this.products.findById(
+      await this.products.findByRestaurantAndId(
+        restaurantId,
         id
       );
 
@@ -81,25 +80,26 @@ export class ProductService {
       name: product.name,
       description:
         product.description,
-      sku: product.sku,
-      barcode:
-        product.barcode,
+      category:
+        product.category,
       price: Number(
         product.price
       ),
       currency:
         product.currency,
       stock: product.stock,
-      isActive:
-        product.isActive,
+      isAvailable:
+        product.isAvailable,
     };
   }
 
   async getExactProduct(
+    restaurantId: number,
     name: string
   ) {
     const product =
       await this.products.getExact(
+        restaurantId,
         name
       );
 
@@ -109,45 +109,40 @@ export class ProductService {
       );
     }
 
-    return {
-      id: product.id,
-      name: product.name,
-      description:
-        product.description,
-      sku: product.sku,
-      barcode:
-        product.barcode,
-      price: Number(
-        product.price
-      ),
-      currency:
-        product.currency,
-      stock: product.stock,
-      isActive:
-        product.isActive,
-    };
+    return product;
   }
 
-  async getProductsByIds(
-    productIds: number[]
+  async getMenuSummary(
+    restaurantId: number
   ) {
     const products =
-      await this.products.getByIds(
-        productIds
+      await this.products.listActive(
+        restaurantId
       );
 
-    return products.map(
-      product => ({
-        id: product.id,
-        name: product.name,
-        price: Number(
-          product.price
-        ),
-        currency:
-          product.currency,
-        stock: product.stock,
-      })
-    );
+    const categories = [
+      ...new Set(
+        products.map(
+          p => p.category
+        )
+      ),
+    ];
+
+    return {
+      totalProducts:
+        products.length,
+      categories,
+      products: products.map(
+        p => ({
+          name: p.name,
+          category:
+            p.category,
+          price: Number(
+            p.price
+          ),
+        })
+      ),
+    };
   }
 }
 

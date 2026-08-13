@@ -1,17 +1,17 @@
+
 import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  OneToOne,
+  ManyToOne,
   JoinColumn,
   CreateDateColumn,
-  UpdateDateColumn,
 } from 'typeorm';
 
 import { Order } from './order.entity';
 
-@Entity('Cargo')
-export class Cargo {
+@Entity('OrderEvents')
+export class OrderEvent {
   @PrimaryGeneratedColumn({
     name: 'Id',
     type: 'int',
@@ -21,40 +21,57 @@ export class Cargo {
   @Column({
     name: 'OrderId',
     type: 'int',
-    unique: true,
   })
   orderId!: number;
 
   @Column({
-    name: 'TrackingNumber',
+    name: 'Provider',
+    type: 'varchar',
+    length: 30,
+  })
+  provider!: string;
+
+  @Column({
+    name: 'EventType',
     type: 'varchar',
     length: 100,
-    unique: true,
   })
-  trackingNumber!: string;
+  eventType!: string;
 
   @Column({
-    name: 'Company',
+    name: 'ExternalEventId',
     type: 'varchar',
     length: 100,
-    default: 'Yurtiçi Kargo',
+    nullable: true,
   })
-  company!: string;
+  externalEventId?: string;
 
   @Column({
-    name: 'Status',
-    type: 'varchar',
-    length: 50,
-    default: 'Preparing',
+    name: 'Payload',
+    type: 'jsonb',
   })
-  status!: string;
+  payload!: Record<string, any>;
 
   @Column({
-    name: 'EstimatedDelivery',
+    name: 'Processed',
+    type: 'boolean',
+    default: false,
+  })
+  processed!: boolean;
+
+  @Column({
+    name: 'ProcessedAt',
     type: 'timestamp',
     nullable: true,
   })
-  estimatedDelivery?: Date;
+  processedAt?: Date;
+
+  @Column({
+    name: 'ErrorMessage',
+    type: 'text',
+    nullable: true,
+  })
+  errorMessage?: string;
 
   @CreateDateColumn({
     name: 'CreatedAt',
@@ -62,15 +79,9 @@ export class Cargo {
   })
   createdAt!: Date;
 
-  @UpdateDateColumn({
-    name: 'UpdatedAt',
-    type: 'timestamp',
-  })
-  updatedAt!: Date;
-
-  @OneToOne(
+  @ManyToOne(
     () => Order,
-    (order) => order.cargo,
+    order => order.events,
     {
       onDelete: 'CASCADE',
     }
@@ -80,3 +91,4 @@ export class Cargo {
   })
   order!: Order;
 }
+

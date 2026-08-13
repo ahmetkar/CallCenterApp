@@ -1,11 +1,12 @@
 import { randomUUID } from 'crypto';
 import { Server as HttpServer } from 'http';
-import { WebSocketServer, WebSocket } from 'ws';
+import {
+  WebSocketServer,
+  WebSocket,
+} from 'ws';
 
-import { SessionManager } from './services/gemini.service';
+import { GeminiService } from './services/gemini.service';
 import { createPipeline } from './pipelines/pipeline-factory';
-
-const sessionManager = new SessionManager();
 
 const voiceTarget =
   process.env.VOICE_TARGET ||
@@ -30,10 +31,9 @@ export function setupWebSocket(
       const sessionId =
         randomUUID();
 
+      // Her bağlantı için yeni Gemini
       const gemini =
-        sessionManager.getSession(
-          sessionId
-        );
+        new GeminiService();
 
       const pipeline =
         createPipeline({
@@ -55,6 +55,13 @@ export function setupWebSocket(
         console.error(
           'Pipeline start error:',
           err
+        );
+
+        client.send(
+          JSON.stringify({
+            type: 'assistant',
+            text: 'Oturum başlatılamadı.',
+          })
         );
       }
 
@@ -96,18 +103,8 @@ export function setupWebSocket(
           );
 
           await pipeline.close();
-
-          sessionManager.removeSession(
-            sessionId
-          );
         }
       );
     }
   );
-
-  setInterval(() => {
-    sessionManager.cleanupIdleSessions(
-      30
-    );
-  }, 5 * 60 * 1000);
 }

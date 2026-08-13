@@ -26,6 +26,8 @@ export class CloudPipeline
   private speechTimer: NodeJS.Timeout | null =
     null;
 
+  private currentResponseId = 0;
+
   constructor(
     private client: WebSocket,
     private gemini: GeminiService
@@ -102,30 +104,46 @@ export class CloudPipeline
             type: 'pong',
           })
         );
+        return;
       }
 
       if (
         message.type ===
         'stop'
       ) {
-        if (this.speechTimer) {
-          clearTimeout(
-            this.speechTimer
-          );
-          this.speechTimer = null;
-        }
-
-        await this.deepgram.finishUtterance();
-
-        await new Promise(resolve =>
-          setTimeout(resolve, 150)
-        );
-
-        this.flushTranscriptBuffer();
+        await this.interrupt();
       }
     } catch {
       // ignore
     }
+  }
+
+  private async interrupt() {
+    this.currentResponseId++;
+
+    this.transcriptQueue = [];
+    this.transcriptBuffer = [];
+
+    if (this.speechTimer) {
+      clearTimeout(
+        this.speechTimer
+      );
+      this.speechTimer = null;
+    }
+
+    await this.deepgram.finishUtterance();
+
+    await new Promise(resolve =>
+      setTimeout(resolve, 150)
+    );
+
+    await this.transport.stop?.();
+
+    this.client.send(
+      JSON.stringify({
+        type: 'session_complete',
+      })
+    );
   }
 
   private handleTranscriptEvent(
@@ -201,10 +219,8 @@ export class CloudPipeline
         const transcript =
           this.transcriptQueue.shift()!;
 
-        console.log(
-          'Cloud transcript:',
-          transcript
-        );
+        const responseId =
+          ++this.currentResponseId;
 
         this.client.send(
           JSON.stringify({
@@ -218,6 +234,13 @@ export class CloudPipeline
             transcript
           );
 
+        if (
+          responseId !==
+          this.currentResponseId
+        ) {
+          continue;
+        }
+
         this.client.send(
           JSON.stringify({
             type: 'assistant',
@@ -225,10 +248,16 @@ export class CloudPipeline
           })
         );
 
-        // TTS arka planda çalışsın
-        void this.transport
-          .send(ai.text)
-          .catch(console.error);
+        await this.transport.send(
+          ai.text
+        );
+
+        if (
+          responseId !==
+          this.currentResponseId
+        ) {
+          continue;
+        }
 
         this.client.send(
           JSON.stringify({
@@ -251,6 +280,8 @@ export class CloudPipeline
   }
 
   async close(): Promise<void> {
+    this.currentResponseId++;
+
     if (this.speechTimer) {
       clearTimeout(
         this.speechTimer
@@ -261,4 +292,3 @@ export class CloudPipeline
     await this.transport.close?.();
   }
 }
-

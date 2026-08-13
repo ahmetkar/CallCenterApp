@@ -19,51 +19,114 @@ export class CustomerRepository extends BaseRepository<Customer> {
     }
   }
 
+  async findByPhone(
+    phone?: string
+  ) {
+    if (!phone) {
+      return null;
+    }
+
+    return this.repo.findOne({
+      where: {
+        phone,
+      },
+    });
+  }
+
   async findOrCreate(data: {
     fullName: string;
-    defaultAddress: string;
     phone?: string;
     email?: string;
+    defaultAddress?: string;
+    source?: string;
   }) {
     let customer =
-      await this.repo.findOne({
-        where: {
-          fullName: ILike(
-            data.fullName
-          ),
-        },
-      });
+      await this.findByPhone(
+        data.phone
+      );
+
+    if (!customer) {
+      customer =
+        await this.repo.findOne({
+          where: {
+            fullName: ILike(
+              data.fullName
+            ),
+          },
+        });
+    }
 
     if (customer) {
-      return customer;
+      customer.fullName =
+        data.fullName;
+
+      if (data.phone) {
+        customer.phone =
+          data.phone;
+      }
+
+      if (data.email) {
+        customer.email =
+          data.email;
+      }
+
+      if (
+        data.defaultAddress
+      ) {
+        customer.defaultAddress =
+          data.defaultAddress;
+      }
+
+      customer.lastOrderSource =
+        data.source;
+
+      customer.totalOrders +=
+        1;
+
+      return this.repo.save(
+        customer
+      );
     }
 
     customer =
       this.repo.create({
         fullName:
           data.fullName,
-        defaultAddress:
-          data.defaultAddress,
         phone: data.phone,
         email: data.email,
+        defaultAddress:
+          data.defaultAddress,
+        lastOrderSource:
+          data.source,
+        totalOrders: 1,
+        isActive: true,
       });
 
-    return this.repo.save(customer);
+    return this.repo.save(
+      customer
+    );
   }
 
   async search(
     keyword: string
   ) {
     return this.repo.find({
-      where: {
-        fullName: ILike(
-          `%${keyword}%`
-        ),
-      },
+      where: [
+        {
+          fullName: ILike(
+            `%${keyword}%`
+          ),
+        },
+        {
+          phone: ILike(
+            `%${keyword}%`
+          ),
+        },
+      ],
+      take: 20,
       order: {
         fullName: 'ASC',
       },
-      take: 20,
     });
   }
 

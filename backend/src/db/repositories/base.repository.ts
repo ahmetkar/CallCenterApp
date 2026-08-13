@@ -1,92 +1,101 @@
 import {
   DeepPartial,
+  EntityTarget,
   FindManyOptions,
   FindOneOptions,
-  ObjectLiteral,
+  FindOptionsWhere,
   Repository,
 } from 'typeorm';
-import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
+
 import { AppDataSource } from '../data-source';
 
-export class BaseRepository<
-  T extends ObjectLiteral
+export abstract class BaseRepository<
+  T extends { id: number }
 > {
   protected repository: Repository<T>;
 
-  constructor(entity: {
-    new (): T;
-  }) {
+  constructor(entity: EntityTarget<T>) {
     this.repository =
       AppDataSource.getRepository(entity);
   }
 
-  async findAll(
-    options?: FindManyOptions<T>
-  ) {
-    return this.repository.find(options);
-  }
-
-  async findById(
-    id: number,
-    options?: FindOneOptions<T>
-  ) {
-    return this.repository.findOne({
-      where: { id } as any,
-      ...(options || {}),
-    });
-  }
-
-  async findOne(
-    options: FindOneOptions<T>
-  ) {
-    return this.repository.findOne(options);
+  protected get repo() {
+    return this.repository;
   }
 
   async create(
     data: DeepPartial<T>
-  ) {
+  ): Promise<T> {
     const entity =
-      this.repository.create(data);
+      this.repo.create(data);
 
-    return this.repository.save(entity);
+    return this.repo.save(entity);
   }
 
   async update(
-    id: number,
-    data: QueryDeepPartialEntity<T>
-  ) {
-    await this.repository.update(
-      id as any,
-      data
-    );
+    where: FindOptionsWhere<T>,
+    data: DeepPartial<T>
+  ): Promise<T | null> {
+    const entity =
+      await this.repo.findOne({
+        where,
+      });
 
-    return this.findById(id);
+    if (!entity) {
+      return null;
+    }
+
+    const merged =
+      this.repo.merge(
+        entity,
+        data
+      );
+
+    return this.repo.save(
+      merged
+    );
   }
 
-  async delete(id: number) {
-    await this.repository.delete(
-      id as any
-    );
-
-    return true;
+  async findById(
+    id: number
+  ): Promise<T | null> {
+    return this.repo.findOneBy({
+      id,
+    } as FindOptionsWhere<T>);
   }
 
-  async count(
+  async findOne(
+    options: FindOneOptions<T>
+  ): Promise<T | null> {
+    return this.repo.findOne(
+      options
+    );
+  }
+
+  async findMany(
     options?: FindManyOptions<T>
-  ) {
-    return this.repository.count(options);
+  ): Promise<T[]> {
+    return this.repo.find(
+      options
+    );
   }
 
-  async exists(id: number) {
+  async delete(
+    where: FindOptionsWhere<T>
+  ) {
+    return this.repo.delete(
+      where
+    );
+  }
+
+  async exists(
+    where: FindOptionsWhere<T>
+  ): Promise<boolean> {
     const count =
-      await this.repository.count({
-        where: { id } as any,
+      await this.repo.count({
+        where,
       });
 
     return count > 0;
-  }
-
-  protected get repo() {
-    return this.repository;
   }
 }

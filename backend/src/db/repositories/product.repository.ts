@@ -20,246 +20,279 @@ export class ProductRepository extends BaseRepository<Product> {
   }
 
   async search(
-    keyword: string
-  ) {
-    return this.repo.find({
-      where: {
-        name: ILike(
-          `%${keyword}%`
-        ),
-        isActive: true,
-      },
-      order: {
-        name: 'ASC',
-      },
-      take: 20,
-    });
-  }
-
-  async listActive(filters?: {
+  restaurantId: number,
+  keyword: string
+) {
+  return this.repo.find({
+    where: {
+      restaurantId,
+      name: ILike(
+        `%${keyword}%`
+      ),
+      isActive: true,
+      isAvailable: true,
+    },
+    order: {
+      name: 'ASC',
+    },
+    take: 20,
+  });
+}
+  async listActive(
+  restaurantId: number,
+  filters?: {
     category?: string;
     inStock?: boolean;
     maxPrice?: number;
-  }) {
-    const qb =
-      this.repo.createQueryBuilder(
-        'p'
-      );
+  }
+) {
+  const qb =
+    this.repo.createQueryBuilder('p');
 
-    qb.where(
-      'p."IsActive" = :active',
+  qb.where(
+    'p.restaurantId = :restaurantId',
+    { restaurantId }
+  );
+
+  qb.andWhere(
+    'p.isActive = :active',
+    {
+      active: true,
+    }
+  );
+
+  qb.andWhere(
+    'p.isAvailable = :available',
+    {
+      available: true,
+    }
+  );
+
+  if (filters?.category) {
+    qb.andWhere(
+      'p.category ILIKE :category',
       {
-        active: true,
+        category: `%${filters.category}%`,
       }
     );
-
-    if (filters?.category) {
-      qb.andWhere(
-        'p."Name" ILIKE :category',
-        {
-          category: `%${filters.category}%`,
-        }
-      );
-    }
-
-    if (filters?.inStock) {
-      qb.andWhere(
-        'p."Stock" > 0'
-      );
-    }
-
-    if (
-      filters?.maxPrice !==
-      undefined
-    ) {
-      qb.andWhere(
-        'p."Price" <= :maxPrice',
-        {
-          maxPrice:
-            filters.maxPrice,
-        }
-      );
-    }
-
-    qb.orderBy(
-      'p."Name"',
-      'ASC'
-    );
-
-    return qb.getMany();
   }
 
-  async getExact(
-    name: string
+  if (filters?.inStock) {
+    qb.andWhere(
+      'p.stock > 0'
+    );
+  }
+
+  if (
+    filters?.maxPrice !==
+    undefined
   ) {
-    const product =
-      await this.repo
-        .createQueryBuilder('p')
-        .where(
-          'p."IsActive" = true'
-        )
-        .andWhere(
-          `
-          similarity(
-            p."Name",
-            :name
-          ) > 0.25
-          `,
-          { name }
-        )
-        .orderBy(
-          `
-          similarity(
-            p."Name",
-            :name
-          )
-          `,
-          'DESC'
-        )
-        .setParameter(
-          'name',
-          name
-        )
-        .getOne();
+    qb.andWhere(
+      'p.price <= :maxPrice',
+      {
+        maxPrice:
+          filters.maxPrice,
+      }
+    );
+  }
 
-    if (product) {
-      return product;
-    }
+  qb.orderBy(
+    'p.category',
+    'ASC'
+  ).addOrderBy(
+    'p.name',
+    'ASC'
+  );
 
+  return qb.getMany();
+}
+
+
+async findByRestaurantAndId(
+  restaurantId: number,
+  productId: number
+) {
+  return this.repo.findOne({
+    where: {
+      id: productId,
+      restaurantId,
+      isActive: true,
+    },
+  });
+}
+
+ async getExact(
+  restaurantId: number,
+  name: string
+) {
+  const product =
+    await this.repo
+      .createQueryBuilder('p')
+      .where(
+        'p.restaurantId = :restaurantId',
+        { restaurantId }
+      )
+      .andWhere(
+        'p.isActive = true'
+      )
+      .andWhere(
+        'p.isAvailable = true'
+      )
+      .andWhere(
+        `
+        similarity(
+          p.name,
+          :name
+        ) > 0.25
+      `,
+        { name }
+      )
+      .orderBy(
+        `
+        similarity(
+          p.name,
+          :name
+        )
+      `,
+        'DESC'
+      )
+      .setParameter(
+        'name',
+        name
+      )
+      .getOne();
+
+  if (product) {
+    return product;
+  }
+
+  return this.repo.findOne({
+    where: {
+      restaurantId,
+      name: ILike(
+        `%${name}%`
+      ),
+      isActive: true,
+      isAvailable: true,
+    },
+  });
+}
+
+  async findByExternalProductId(
+    restaurantId: number,
+    externalProductId: string
+  ) {
     return this.repo.findOne({
       where: {
-        name: ILike(
-          `%${name}%`
-        ),
-        isActive: true,
+        restaurantId,
+        externalProductId,
       },
     });
+  }
+
+  async upsertExternalProduct(data: {
+    restaurantId: number;
+    externalProductId: string;
+    name: string;
+    price: number;
+    category?: string;
+    description?: string;
+  }) {
+    let product =
+      await this.findByExternalProductId(
+        data.restaurantId,
+        data.externalProductId
+      );
+
+    if (!product) {
+      product =
+        this.repo.create({
+          restaurantId:
+            data.restaurantId,
+          externalProductId:
+            data.externalProductId,
+          name: data.name,
+          price: data.price,
+          category:
+            data.category,
+          description:
+            data.description,
+          isActive: true,
+          isAvailable: true,
+          lastSyncedAt:
+            new Date(),
+        });
+
+      return this.repo.save(
+        product
+      );
+    }
+
+    product.name = data.name;
+    product.price = data.price;
+    product.category =
+      data.category;
+    product.description =
+      data.description;
+    product.lastSyncedAt =
+      new Date();
+
+    return this.repo.save(
+      product
+    );
   }
 
   async decreaseStock(
     productId: number,
     quantity: number
   ) {
-    const result =
-      await this.repo
-        .createQueryBuilder()
-        .update(Product)
-        .set({
-          stock: () =>
-            `"Stock" - ${quantity}`,
-        })
-        .where(
-          '"Id" = :productId',
-          { productId }
-        )
-        .andWhere(
-          '"Stock" >= :quantity',
-          { quantity }
-        )
-        .returning('*')
-        .execute();
+    const product =
+      await this.findById(
+        productId
+      );
 
-    if (
-      result.affected === 0
-    ) {
+    if (!product) {
       throw new Error(
-        'Yetersiz stok veya ürün bulunamadı'
+        'Ürün bulunamadı'
       );
     }
 
-    return result.raw[0] as Product;
+    if (
+      product.stock <
+      quantity
+    ) {
+      throw new Error(
+        'Yetersiz stok'
+      );
+    }
+
+    product.stock -= quantity;
+
+    return this.repo.save(
+      product
+    );
   }
 
   async increaseStock(
     productId: number,
     quantity: number
   ) {
-    const result =
-      await this.repo
-        .createQueryBuilder()
-        .update(Product)
-        .set({
-          stock: () =>
-            `"Stock" + ${quantity}`,
-        })
-        .where(
-          '"Id" = :productId',
-          { productId }
-        )
-        .returning('*')
-        .execute();
+    const product =
+      await this.findById(
+        productId
+      );
 
-    if (
-      result.affected === 0
-    ) {
+    if (!product) {
       throw new Error(
         'Ürün bulunamadı'
       );
     }
 
-    return result.raw[0] as Product;
-  }
+    product.stock += quantity;
 
-  async decreaseStocks(
-    items: Array<{
-      productId: number;
-      quantity: number;
-    }>
-  ) {
-    const updatedProducts: Product[] =
-      [];
-
-    for (const item of items) {
-      const product =
-        await this.decreaseStock(
-          item.productId,
-          item.quantity
-        );
-
-      updatedProducts.push(
-        product
-      );
-    }
-
-    return updatedProducts;
-  }
-
-  async increaseStocks(
-    items: Array<{
-      productId: number;
-      quantity: number;
-    }>
-  ) {
-    const updatedProducts: Product[] =
-      [];
-
-    for (const item of items) {
-      const product =
-        await this.increaseStock(
-          item.productId,
-          item.quantity
-        );
-
-      updatedProducts.push(
-        product
-      );
-    }
-
-    return updatedProducts;
-  }
-
-  async getByIds(
-    productIds: number[]
-  ) {
-    return this.repo
-      .createQueryBuilder('p')
-      .where(
-        'p."Id" IN (:...ids)',
-        {
-          ids: productIds,
-        }
-      )
-      .getMany();
+    return this.repo.save(
+      product
+    );
   }
 }
 

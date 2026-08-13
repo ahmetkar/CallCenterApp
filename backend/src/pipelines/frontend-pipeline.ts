@@ -1,5 +1,4 @@
 import { WebSocket as NodeWebSocket } from 'ws';
-
 import { DeepgramService } from '../services/deepgram.service';
 import { GeminiService } from '../services/gemini.service';
 import { TtsService } from '../services/tts.service';
@@ -25,6 +24,8 @@ export class FrontendPipeline
 
   private speechTimer: NodeJS.Timeout | null =
     null;
+
+  private currentResponseId = 0;
 
   constructor(
     private client: NodeWebSocket,
@@ -89,25 +90,37 @@ export class FrontendPipeline
     );
 
     if (message.type === 'stop') {
-      if (this.speechTimer) {
-        clearTimeout(
-          this.speechTimer
-        );
-        this.speechTimer = null;
-      }
-
-      await this.deepgram.finishUtterance();
-
-      // Deepgram'ın son transcript'ini
-      // göndermesi için kısa süre bekle
-      await new Promise(resolve =>
-        setTimeout(resolve, 150)
-      );
-
-      this.flushTranscriptBuffer();
-
+      await this.interrupt();
       return;
     }
+  }
+
+  private async interrupt() {
+    this.currentResponseId++;
+
+    this.transcriptQueue = [];
+    this.transcriptBuffer = [];
+
+    if (this.speechTimer) {
+      clearTimeout(
+        this.speechTimer
+      );
+      this.speechTimer = null;
+    }
+
+    await this.deepgram.finishUtterance();
+
+    await new Promise(resolve =>
+      setTimeout(resolve, 150)
+    );
+
+    await this.transport.stop?.();
+
+    this.client.send(
+      JSON.stringify({
+        type: 'session_complete',
+      })
+    );
   }
 
   private handleTranscriptEvent(
@@ -183,10 +196,8 @@ export class FrontendPipeline
         const transcript =
           this.transcriptQueue.shift()!;
 
-        console.log(
-          'Transcript:',
-          transcript
-        );
+        const responseId =
+          ++this.currentResponseId;
 
         this.client.send(
           JSON.stringify({
@@ -200,6 +211,13 @@ export class FrontendPipeline
             transcript
           );
 
+        if (
+          responseId !==
+          this.currentResponseId
+        ) {
+          continue;
+        }
+
         this.client.send(
           JSON.stringify({
             type: 'assistant',
@@ -207,11 +225,16 @@ export class FrontendPipeline
           })
         );
 
-        // TTS arka planda çalışsın,
-        // pipeline kilitlenmesin
-        void this.transport
-          .send(ai.text)
-          .catch(console.error);
+        await this.transport.send(
+          ai.text
+        );
+
+        if (
+          responseId !==
+          this.currentResponseId
+        ) {
+          continue;
+        }
 
         this.client.send(
           JSON.stringify({
@@ -230,6 +253,8 @@ export class FrontendPipeline
   }
 
   async close(): Promise<void> {
+    this.currentResponseId++;
+
     if (this.speechTimer) {
       clearTimeout(
         this.speechTimer
@@ -240,4 +265,3 @@ export class FrontendPipeline
     await this.transport.close?.();
   }
 }
-

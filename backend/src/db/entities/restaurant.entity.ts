@@ -1,4 +1,3 @@
-
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -8,10 +7,12 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import { IntegrationAccount } from './integrationaccount.entity';
+import { Product } from './product.entity';
 import { Order } from './order.entity';
 
-@Entity('Customers')
-export class Customer {
+@Entity('Restaurants')
+export class Restaurant {
   @PrimaryGeneratedColumn({
     name: 'Id',
     type: 'int',
@@ -19,11 +20,11 @@ export class Customer {
   id!: number;
 
   @Column({
-    name: 'FullName',
+    name: 'Name',
     type: 'varchar',
     length: 200,
   })
-  fullName!: string;
+  name!: string;
 
   @Column({
     name: 'Phone',
@@ -42,26 +43,27 @@ export class Customer {
   email?: string;
 
   @Column({
-    name: 'DefaultAddress',
+    name: 'Address',
     type: 'text',
     nullable: true,
   })
-  defaultAddress?: string;
+  address?: string;
 
   @Column({
-    name: 'LastOrderSource',
+    name: 'Currency',
     type: 'varchar',
-    length: 30,
-    nullable: true,
+    length: 10,
+    default: 'TRY',
   })
-  lastOrderSource?: string;
+  currency!: string;
 
   @Column({
-    name: 'TotalOrders',
-    type: 'int',
-    default: 0,
+    name: 'Timezone',
+    type: 'varchar',
+    length: 50,
+    default: 'Europe/Istanbul',
   })
-  totalOrders!: number;
+  timezone!: string;
 
   @Column({
     name: 'IsActive',
@@ -83,8 +85,20 @@ export class Customer {
   updatedAt!: Date;
 
   @OneToMany(
+    () => IntegrationAccount,
+    integration => integration.restaurant
+  )
+  integrations!: IntegrationAccount[];
+
+  @OneToMany(
+    () => Product,
+    product => product.restaurant
+  )
+  products!: Product[];
+
+  @OneToMany(
     () => Order,
-    order => order.customer
+    order => order.restaurant
   )
   orders!: Order[];
 }

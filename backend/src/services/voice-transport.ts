@@ -1,7 +1,15 @@
 import type { WebSocket as NodeWebSocket } from 'ws';
-import { TtsService } from "./tts.service";
+import { TtsService } from './tts.service';
 
-export class FrontendVoiceTransport {
+export interface VoiceTransport {
+  send(text: string): Promise<void>;
+  stop?(): Promise<void>;
+  close?(): Promise<void>;
+}
+
+export class FrontendVoiceTransport
+  implements VoiceTransport
+{
   private currentRequest = 0;
 
   constructor(
@@ -10,39 +18,61 @@ export class FrontendVoiceTransport {
   ) {}
 
   async send(text: string): Promise<void> {
-  const requestId = ++this.currentRequest;
+    const requestId =
+      ++this.currentRequest;
 
-  for await (const chunk of this.tts.synthesizeStream(text)) {
-    if (requestId !== this.currentRequest) {
-      return;
+    for await (const chunk of this.tts.synthesizeStream(text)) {
+      if (
+        requestId !==
+        this.currentRequest
+      ) {
+        return;
+      }
+
+      const arrayBuffer =
+        chunk.buffer.slice(
+          chunk.byteOffset,
+          chunk.byteOffset +
+            chunk.byteLength
+        ) as ArrayBuffer;
+
+      this.client.send(
+        arrayBuffer
+      );
     }
 
-    const arrayBuffer = chunk.buffer.slice(
-        chunk.byteOffset,
-        chunk.byteOffset + chunk.byteLength
-      ) as ArrayBuffer;
-
-
-    this.client.send(
-      arrayBuffer
-    );
+    if (
+      requestId ===
+      this.currentRequest
+    ) {
+      this.client.send(
+        JSON.stringify({
+          type: 'audio_end',
+        })
+      );
+    }
   }
 
-  if (requestId === this.currentRequest) {
+  async stop(): Promise<void> {
+    this.currentRequest++;
+
     this.client.send(
       JSON.stringify({
-        type: 'audio_end',
+        type: 'audio_stop',
       })
     );
   }
-}
 
-  close() {
-    this.currentRequest++;
+  async close(): Promise<void> {
+    await this.stop();
   }
 }
 
-export class CloudVoiceTransport {
+export class CloudVoiceTransport
+  implements VoiceTransport
+{
+  private currentRequest = 0;
+
   private audioCallback?: (
     pcm: Buffer
   ) => void;
@@ -56,15 +86,31 @@ export class CloudVoiceTransport {
       pcm: Buffer
     ) => void
   ) {
-    this.audioCallback = callback;
+    this.audioCallback =
+      callback;
   }
 
   async send(text: string): Promise<void> {
-    const pcm =
-      await this.tts.synthesizeForCloud(text);
+    const requestId =
+      ++this.currentRequest;
 
-    this.audioCallback?.(pcm);
+    for await (const chunk of this.tts.synthesizeStream(text)) {
+      if (
+        requestId !==
+        this.currentRequest
+      ) {
+        return;
+      }
+
+      this.audioCallback?.(chunk);
+    }
   }
 
-  close() {}
+  async stop(): Promise<void> {
+    this.currentRequest++;
+  }
+
+  async close(): Promise<void> {
+    await this.stop();
+  }
 }

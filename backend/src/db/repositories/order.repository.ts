@@ -1,7 +1,11 @@
-import { EntityManager } from 'typeorm';
 
-import { Order } from '../entities/order.entity';
+import {
+  EntityManager,
+  IsNull,
+} from 'typeorm';
+import { Order, OrderSource, OrderStatus } from '../entities/order.entity';
 import { BaseRepository } from './base.repository';
+import { IntegrationProvider } from '../entities/integrationaccount.entity';
 
 export class OrderRepository extends BaseRepository<Order> {
   constructor(
@@ -15,40 +19,31 @@ export class OrderRepository extends BaseRepository<Order> {
     }
   }
 
-  async createOrder(data: {
-    customerId?: number;
-    customerName: string;
-    address: string;
-    totalPrice: number;
-    notes?: string;
-    items: Array<{
-      productId: number;
-      quantity: number;
-      unitPrice: number;
-      totalPrice: number;
-    }>;
-  }) {
-    const order = this.repo.create({
-      customerId:
-        data.customerId,
-      customerName:
-        data.customerName,
-      address: data.address,
-      totalPrice:
-        data.totalPrice,
-      notes: data.notes,
-      status: 'Preparing',
-      items: data.items.map(item => ({
-        productId:
-          item.productId,
-        quantity:
-          item.quantity,
-        unitPrice:
-          item.unitPrice,
-        totalPrice:
-          item.totalPrice,
-      })),
-    });
+ async findByExternalOrderId(
+  provider: IntegrationProvider,
+  externalOrderId: string
+) {
+  return this.repo.findOne({
+    where: {
+      source:
+        provider ===
+        IntegrationProvider.UBER_EATS
+          ? OrderSource.UBER_EATS
+          : OrderSource.DELIVERY_HERO,
+      externalOrderId,
+    },
+    relations: {
+      items: true,
+      delivery: true,
+    },
+  });
+}
+
+  async createMarketplaceOrder(
+    data: Partial<Order>
+  ) {
+    const order =
+      this.repo.create(data);
 
     return this.repo.save(order);
   }
@@ -61,14 +56,33 @@ export class OrderRepository extends BaseRepository<Order> {
         id: orderId,
       },
       relations: {
+        restaurant: true,
+        integrationAccount: true,
+        customer: true,
         items: {
           product: true,
         },
-        customer: true,
-        cargo: true,
-      }
+        delivery: true,
+        events: true,
+      },
     });
   }
+
+ async updateExternalStatus(
+  orderId: number,
+  externalStatus: string
+) {
+  await this.repo.update(
+    { id: orderId },
+    {
+      externalStatus,
+    }
+  );
+
+  return this.findById(
+    orderId
+  );
+}
 
   async updateStatus(
     orderId: number,
@@ -76,64 +90,125 @@ export class OrderRepository extends BaseRepository<Order> {
   ) {
     await this.repo.update(
       { id: orderId },
-      { status }
+      {
+        status: status as any,
+      }
     );
 
-    return this.findById(
+    return this.getOrderWithDetails(
       orderId
     );
   }
 
-  async listLatest(
-    limit = 20
-  ) {
-    return this.repo.find({
-      relations: {
-        items: {
-          product: true,
-        },
-        cargo: true,
-      },
-      order: {
-        createdAt: 'DESC',
-      },
-      take: limit,
-    });
-  }
+ async markAccepted(
+  orderId: number
+) {
+  await this.repo.update(
+    { id: orderId },
+    {
+      status:
+        OrderStatus.ACCEPTED,
+      acceptedAt: new Date(),
+    }
+  );
 
-  async listByCustomer(
-    customerId: number
-  ) {
-    return this.repo.find({
-      where: { customerId },
-      relations: {
-        items: {
-          product: true,
-        },
-        cargo: true,
-      },
-      order: {
-        createdAt: 'DESC',
-      },
-    });
-  }
+  return this.findById(
+    orderId
+  );
+}
 
-  async getOrderItems(
+  async markReady(
     orderId: number
   ) {
-    const order =
-      await this.repo.findOne({
-        where: {
-          id: orderId,
-        },
-        relations: {
-          items: {
-            product: true,
-          },
-        },
-      });
-
-    return order?.items ?? [];
+    await this.repo.update(
+      { id: orderId },
+      {
+        status: OrderStatus.READY,
+        readyAt: new Date(),
+      }
+    );
   }
+
+  async markDelivered(
+    orderId: number
+  ) {
+    await this.repo.update(
+      { id: orderId },
+      {
+        status: OrderStatus.DELIVERED,
+        deliveredAt: new Date(),
+      }
+    );
+  }
+
+  async listPendingSync() {
+  return this.repo.find({
+    where: {
+      externalOrderId: IsNull(),
+    },
+    relations: {
+      items: true,
+    },
+    order: {
+      createdAt: 'ASC',
+    },
+  });
+}
+
+  async listByCustomer(
+  customerId: number,
+  limit = 20
+) {
+  return this.repo.find({
+    where: {
+      customerId,
+    },
+    relations: {
+      items: true,
+      delivery: true,
+      customer: true,
+    },
+    order: {
+      createdAt: 'DESC',
+    },
+    take: limit,
+  });
+}
+
+  async listByRestaurant(
+  restaurantId: number,
+  limit = 50
+) {
+  return this.repo.find({
+    where: {
+      restaurantId,
+    },
+    relations: {
+      delivery: true,
+    },
+    order: {
+      createdAt: 'DESC',
+    },
+    take: limit,
+  });
+}
+
+  async findByOrderNumber(
+  orderNumber: string
+) {
+  return this.repo.findOne({
+    where: {
+      orderNumber,
+    },
+    relations: {
+      items: true,
+      delivery: true,
+      customer: true,
+    },
+  });
+}
+
+
+
 }
 
