@@ -264,7 +264,7 @@ export class OrderService {
 
         platformItems.push(item);
       }
-
+      //DELIVERYHERO VE UBER EATS ENTEGRASYONLARI KULLANILABİLİR OLDUĞUNDA AÇILABİLİR.
       /*
       let platformResult: any = null;
 

@@ -9,6 +9,8 @@ import { OrderItem } from './entities/orderitem.entity';
 import { Customer } from './entities/customer.entity';
 import { Restaurant } from './entities/restaurant.entity';
 
+import dotenv from 'dotenv';
+dotenv.config();
 
 export const AppDataSource =
   new DataSource({

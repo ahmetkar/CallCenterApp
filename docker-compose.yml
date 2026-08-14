@@ -6,7 +6,7 @@ services:
     container_name: voiceapp-postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "5500:5432"
     environment:
       POSTGRES_DB: VoiceShop
       POSTGRES_USER: postgres

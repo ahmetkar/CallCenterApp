@@ -19,6 +19,79 @@ export class ProductRepository extends BaseRepository<Product> {
     }
   }
 
+
+
+  async upsertFromPlatform(data: {
+    restaurantId: number;
+    externalProductId: string;
+    name: string;
+    description?: string;
+    category?: string;
+    price: number;
+    currency?: string;
+    isAvailable: boolean;
+  }): Promise<Product> {
+    let product =
+      await this.repo.findOne({
+        where: {
+          restaurantId:
+            data.restaurantId,
+          externalProductId:
+            data.externalProductId,
+        },
+      });
+
+    if (!product) {
+      product =
+        this.repo.create({
+          restaurantId:
+            data.restaurantId,
+          externalProductId:
+            data.externalProductId,
+          name: data.name,
+          description:
+            data.description,
+          category:
+            data.category,
+          price: data.price,
+          currency:
+            data.currency ??
+            'TRY',
+          stock: 100,
+          isAvailable:
+            data.isAvailable,
+          isActive: true,
+          lastSyncedAt:
+            new Date(),
+        });
+
+      return this.repo.save(
+        product
+      );
+    }
+
+    product.name = data.name;
+    product.description =
+      data.description;
+    product.category =
+      data.category;
+    product.price =
+      data.price;
+    product.currency =
+      data.currency ??
+      product.currency;
+    product.isAvailable =
+      data.isAvailable;
+    
+    product.lastSyncedAt =
+      new Date();
+
+    return this.repo.save(
+      product
+    );
+  }
+
+
   async search(
   restaurantId: number,
   keyword: string

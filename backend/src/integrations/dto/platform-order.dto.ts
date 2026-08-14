@@ -16,5 +16,9 @@ export interface PlatformOrderDto {
   estimatedPickupTime?: Date;
 
   estimatedDeliveryTime?: Date;
+
+  totalPrice:number;
+
+  raw:Response;
 }
 
