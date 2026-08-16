@@ -44,18 +44,7 @@ export class RestaurantService {
       timezone:
         restaurant.timezone,
       isActive:
-        restaurant.isActive,
-      integrations:
-        restaurant.integrations.map(
-          i => ({
-            provider:
-              i.provider,
-            externalStoreId:
-              i.externalStoreId,
-            isActive:
-              i.isActive,
-          })
-        ),
+        restaurant.isActive
     };
   }
 

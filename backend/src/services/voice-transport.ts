@@ -1,11 +1,23 @@
-import type { WebSocket as NodeWebSocket } from 'ws';
 import { TtsService } from './tts.service';
 
+import {
+  pcm16ToMulaw,
+} from '../integrations/telephony/twilio-audio';
+
 export interface VoiceTransport {
-  send(text: string): Promise<void>;
+  send(
+    text: string
+  ): Promise<void>;
+
   stop?(): Promise<void>;
+
   close?(): Promise<void>;
 }
+
+
+/* =====================================================
+   FRONTEND TRANSPORT
+===================================================== */
 
 export class FrontendVoiceTransport
   implements VoiceTransport
@@ -13,15 +25,22 @@ export class FrontendVoiceTransport
   private currentRequest = 0;
 
   constructor(
-    private client: NodeWebSocket,
+    private client: any,
     private tts: TtsService
   ) {}
 
-  async send(text: string): Promise<void> {
+  async send(
+    text: string
+  ): Promise<void> {
     const requestId =
       ++this.currentRequest;
 
-    for await (const chunk of this.tts.synthesizeStream(text)) {
+    for await (
+      const chunk of
+      this.tts.synthesizeStream(
+        text
+      )
+    ) {
       if (
         requestId !==
         this.currentRequest
@@ -47,7 +66,8 @@ export class FrontendVoiceTransport
     ) {
       this.client.send(
         JSON.stringify({
-          type: 'audio_end',
+          type:
+            'audio_end',
         })
       );
     }
@@ -58,7 +78,8 @@ export class FrontendVoiceTransport
 
     this.client.send(
       JSON.stringify({
-        type: 'audio_stop',
+        type:
+          'audio_stop',
       })
     );
   }
@@ -67,6 +88,11 @@ export class FrontendVoiceTransport
     await this.stop();
   }
 }
+
+
+/* =====================================================
+   CLOUD / TWILIO TRANSPORT
+===================================================== */
 
 export class CloudVoiceTransport
   implements VoiceTransport
@@ -85,24 +111,52 @@ export class CloudVoiceTransport
     callback: (
       pcm: Buffer
     ) => void
-  ) {
+  ): void {
     this.audioCallback =
       callback;
   }
 
-  async send(text: string): Promise<void> {
+  async send(
+    text: string
+  ): Promise<void> {
     const requestId =
       ++this.currentRequest;
 
-    for await (const chunk of this.tts.synthesizeStream(text)) {
-      if (
-        requestId !==
-        this.currentRequest
-      ) {
-        return;
-      }
+    /**
+     * Buradan TTS'den PCM16 geliyor.
+     */
+    const pcm =
+      await this.tts
+        .synthesizeForCloud(
+          text
+        );
 
-      this.audioCallback?.(chunk);
+    if (
+      requestId !==
+      this.currentRequest
+    ) {
+      return;
+    }
+
+    /**
+     * PCM16
+     *
+     * ↓
+     *
+     * μ-law
+     */
+    const mulaw =
+      pcm16ToMulaw(
+        pcm
+      );
+
+    if (
+      requestId ===
+      this.currentRequest
+    ) {
+      this.audioCallback?.(
+        mulaw
+      );
     }
   }
 

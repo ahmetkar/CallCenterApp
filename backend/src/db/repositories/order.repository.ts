@@ -5,7 +5,7 @@ import {
 } from 'typeorm';
 import { Order, OrderSource, OrderStatus } from '../entities/order.entity';
 import { BaseRepository } from './base.repository';
-import { IntegrationProvider } from '../entities/integrationaccount.entity';
+
 
 export class OrderRepository extends BaseRepository<Order> {
   constructor(
@@ -20,17 +20,14 @@ export class OrderRepository extends BaseRepository<Order> {
   }
 
  async findByExternalOrderId(
-  provider: IntegrationProvider,
+  provider: OrderSource,
   externalOrderId: string
 ) {
   return this.repo.findOne({
     where: {
       source:
-        provider ===
-        IntegrationProvider.UBER_EATS
-          ? OrderSource.UBER_EATS
-          : OrderSource.DELIVERY_HERO,
-      externalOrderId,
+        provider,
+      externalOrderId
     },
     relations: {
       items: true,
@@ -57,7 +54,6 @@ export class OrderRepository extends BaseRepository<Order> {
       },
       relations: {
         restaurant: true,
-        integrationAccount: true,
         customer: true,
         items: {
           product: true,

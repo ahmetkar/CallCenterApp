@@ -3,7 +3,10 @@ import { WebSocket } from 'ws';
 import { DeepgramService } from '../services/deepgram.service';
 import { GeminiService } from '../services/gemini.service';
 import { TtsService } from '../services/tts.service';
-import { CloudVoiceTransport } from '../services/voice-transport';
+import {
+  CloudVoiceTransport,
+} from '../services/voice-transport';
+
 import { VoicePipeline } from './voice-pipeline';
 
 export class CloudPipeline
@@ -15,72 +18,104 @@ export class CloudPipeline
   private tts =
     new TtsService();
 
-  private transport: CloudVoiceTransport;
+  private transport:
+    CloudVoiceTransport;
 
   private processing = false;
 
-  private transcriptQueue: string[] = [];
+  private transcriptQueue:
+    string[] = [];
 
-  private transcriptBuffer: string[] = [];
+  private transcriptBuffer:
+    string[] = [];
 
-  private speechTimer: NodeJS.Timeout | null =
-    null;
+  private speechTimer:
+    NodeJS.Timeout | null = null;
 
   private currentResponseId = 0;
 
-  constructor(
-    private client: WebSocket,
-    private gemini: GeminiService
-  ) {
-    this.transport =
-      new CloudVoiceTransport(
-        this.tts
-      );
-
-    this.transport.onAudio(
-      (pcm: Buffer) => {
-        void this.deepgram.sendAudio(
-          pcm
-        );
-      }
+constructor(
+  private client: WebSocket,
+  private gemini: GeminiService
+) {
+  this.transport =
+    new CloudVoiceTransport(
+      this.tts
     );
 
-    this.deepgram.onTranscript(
-      (
+  this.deepgram.onTranscript(
+    (
+      transcript,
+      speechFinal
+    ) => {
+      this.handleTranscriptEvent(
         transcript,
         speechFinal
-      ) => {
-        this.handleTranscriptEvent(
-          transcript,
-          speechFinal
-        );
-      }
-    );
-  }
+      );
+    }
+  );
+}
 
   async start(): Promise<void> {
     await this.deepgram.connect();
 
     const welcome =
-      await this.gemini.startConversation();
+      await this.gemini
+        .startConversation();
 
-    this.client.send(
-      JSON.stringify({
-        type: 'assistant',
-        text: welcome.text,
-      })
-    );
+    /*
+     * Browser varsa UI'a gönder.
+     */
+    if (this.client) {
+      this.client.send(
+        JSON.stringify({
+          type: 'assistant',
+          text: welcome.text,
+        })
+      );
+    }
 
+    /*
+     * TTS
+     */
     await this.transport.send(
       welcome.text
     );
 
-    this.client.send(
-      JSON.stringify({
-        type: 'session_complete',
-      })
+    if (this.client) {
+      this.client.send(
+        JSON.stringify({
+          type: 'session_complete',
+        })
+      );
+    }
+  }
+
+  /**
+   * Pipeline'a gelen kullanıcı sesi.
+   *
+   * Twilio tarafında WebSocket'ten
+   * gelen PCM buraya verilebilir.
+   */
+  async sendAudio(
+    pcm: Buffer
+  ): Promise<void> {
+    await this.deepgram.sendAudio(
+      pcm
     );
   }
+
+  async receiveAudio(
+  pcm: Buffer
+): Promise<void> {
+  await this.deepgram.sendAudio(
+    pcm
+  );
+}
+
+async stopConversation(): Promise<void> {
+  await this.interrupt();
+}
 
   async handleMessage(
     raw: Buffer,
@@ -91,19 +126,21 @@ export class CloudPipeline
     }
 
     try {
-      const message = JSON.parse(
-        raw.toString()
-      );
+      const message =
+        JSON.parse(
+          raw.toString()
+        );
 
       if (
         message.type ===
         'ping'
       ) {
-        this.client.send(
+        this.client?.send(
           JSON.stringify({
             type: 'pong',
           })
         );
+
         return;
       }
 
@@ -122,24 +159,32 @@ export class CloudPipeline
     this.currentResponseId++;
 
     this.transcriptQueue = [];
+
     this.transcriptBuffer = [];
 
     if (this.speechTimer) {
       clearTimeout(
         this.speechTimer
       );
+
       this.speechTimer = null;
     }
 
-    await this.deepgram.finishUtterance();
+    await this.deepgram
+      .finishUtterance();
 
-    await new Promise(resolve =>
-      setTimeout(resolve, 150)
+    await new Promise(
+      resolve =>
+        setTimeout(
+          resolve,
+          150
+        )
     );
 
-    await this.transport.stop?.();
+    await this.transport
+      .stop?.();
 
-    this.client.send(
+    this.client?.send(
       JSON.stringify({
         type: 'session_complete',
       })
@@ -158,6 +203,7 @@ export class CloudPipeline
       clearTimeout(
         this.speechTimer
       );
+
       this.speechTimer = null;
     }
 
@@ -174,8 +220,8 @@ export class CloudPipeline
 
   private flushTranscriptBuffer(): void {
     if (
-      this.transcriptBuffer.length ===
-      0
+      this.transcriptBuffer
+        .length === 0
     ) {
       return;
     }
@@ -203,9 +249,7 @@ export class CloudPipeline
   }
 
   private async processQueue(): Promise<void> {
-    if (
-      this.processing
-    ) {
+    if (this.processing) {
       return;
     }
 
@@ -213,8 +257,8 @@ export class CloudPipeline
 
     try {
       while (
-        this.transcriptQueue.length >
-        0
+        this.transcriptQueue
+          .length > 0
       ) {
         const transcript =
           this.transcriptQueue.shift()!;
@@ -222,7 +266,10 @@ export class CloudPipeline
         const responseId =
           ++this.currentResponseId;
 
-        this.client.send(
+        /*
+         * Browser varsa kullanıcı mesajını gönder.
+         */
+        this.client?.send(
           JSON.stringify({
             type: 'user',
             text: transcript,
@@ -230,9 +277,10 @@ export class CloudPipeline
         );
 
         const ai =
-          await this.gemini.processMessage(
-            transcript
-          );
+          await this.gemini
+            .processMessage(
+              transcript
+            );
 
         if (
           responseId !==
@@ -241,13 +289,29 @@ export class CloudPipeline
           continue;
         }
 
-        this.client.send(
+        /*
+         * Browser varsa UI'a gönder.
+         */
+        this.client?.send(
           JSON.stringify({
             type: 'assistant',
             text: ai.text,
           })
         );
 
+        /*
+         * TTS.
+         *
+         * CloudVoiceTransport:
+         *
+         * Gemini
+         *   ↓
+         * TTS
+         *   ↓
+         * PCM
+         *   ↓
+         * audioOutput
+         */
         await this.transport.send(
           ai.text
         );
@@ -259,7 +323,7 @@ export class CloudPipeline
           continue;
         }
 
-        this.client.send(
+        this.client?.send(
           JSON.stringify({
             type: 'session_complete',
           })
@@ -289,6 +353,8 @@ export class CloudPipeline
     }
 
     await this.deepgram.close();
-    await this.transport.close?.();
+
+    await this.transport
+      .close?.();
   }
 }

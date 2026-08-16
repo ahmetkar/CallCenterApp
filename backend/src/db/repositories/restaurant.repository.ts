@@ -33,10 +33,7 @@ export class RestaurantRepository extends BaseRepository<Restaurant> {
     return this.repo.findOne({
       where: {
         id: restaurantId,
-      },
-      relations: {
-        integrations: true,
-      },
+      }
     });
   }
 

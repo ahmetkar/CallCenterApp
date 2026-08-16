@@ -65,6 +65,7 @@ export class GeminiService {
         - Ürün ve sipariş bilgilerini sadece tool'lardan al.
         - Bilgi uydurma.
         - Kısa ve doğal konuş.
+        - Kullanıcıya cevap verirken sadece siparişle ilgili cevapları döndür. Kesinlikle kendi eylemlerin,kullandığın toolar,teknikler ile ilgili açıklama yapma.
         - Cevap verirken,menüyü anlatırken,listeyi anlatırken harf ve rakam olmayan karakter eklemesi yapma, sade ve anlaşılır cevap ver.
         - Verilen adres bilgisinin geçerli bir adres bilgisi olup olmadığını kontrol et.
         - Sipariş oluşturmadan önce kullanıcıya aldığın bilgileri özellikle ad ve soyadı ve adresi söyle ve onayını al

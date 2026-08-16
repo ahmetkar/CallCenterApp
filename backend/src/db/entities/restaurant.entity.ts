@@ -7,7 +7,6 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-import { IntegrationAccount } from './integrationaccount.entity';
 import { Product } from './product.entity';
 import { Order } from './order.entity';
 
@@ -84,12 +83,7 @@ export class Restaurant {
   })
   updatedAt!: Date;
 
-  @OneToMany(
-    () => IntegrationAccount,
-    integration => integration.restaurant
-  )
-  integrations!: IntegrationAccount[];
-
+ 
   @OneToMany(
     () => Product,
     product => product.restaurant

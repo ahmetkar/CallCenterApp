@@ -249,7 +249,7 @@ export async function executeTool(
               name:
                 args.customerName,
               phone:
-                "05461232121",
+                "",
               address:
                 args.address,
               email:
@@ -272,23 +272,7 @@ export async function executeTool(
             notes: args.notes,
           }
         );
-        /*
-        return {
-          success: true,
-          message:
-            'Sipariş başarıyla oluşturuldu.',
-          orderId:
-            result.orderId,
-          orderNumber:
-            result.orderNumber,
-          provider:
-            result.provider,
-          totalPrice:
-            result.totalPrice,
-          trackingUrl:
-            result.trackingUrl,
-        };*/
-
+     
         return {
           success: true,
           message:

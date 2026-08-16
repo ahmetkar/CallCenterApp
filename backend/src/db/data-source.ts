@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { Product } from './entities/product.entity';
-import { IntegrationAccount } from './entities/integrationaccount.entity';
+
 import { OrderEvent } from './entities/orderevent.entity';
 import { Delivery } from './entities/delivery.entity';
 import { Order } from './entities/order.entity';
@@ -47,7 +47,6 @@ export const AppDataSource =
       OrderItem,
       Delivery,
       OrderEvent,
-      IntegrationAccount,
       Product
     ],
    

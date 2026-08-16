@@ -71,7 +71,7 @@ export class OrderEvent {
     type: 'text',
     nullable: true,
   })
-  errorMessage?: string;
+  errorMessage?: string | null;
 
   @CreateDateColumn({
     name: 'CreatedAt',

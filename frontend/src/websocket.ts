@@ -3,7 +3,13 @@ let socket: WebSocket | null = null;
 export function connectSocket(
   onTranscript: (text: string, isFinal: boolean) => void
 ) {
-  socket = new WebSocket('ws://localhost:4000');
+  const configuredUrl = import.meta.env.VITE_VOICE_WS_URL;
+  const defaultProtocol =
+    window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = new URL(
+    configuredUrl ?? `${defaultProtocol}//${window.location.hostname}:4000`
+  );
+  socket = new WebSocket(url);
 
   socket.onmessage = (event) => {
     const msg = JSON.parse(event.data);

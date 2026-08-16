@@ -25,6 +25,16 @@ interface WsMessage {
   sessionId?: string;
 }
 
+const socketUrl = () => {
+  const configuredUrl = import.meta.env.VITE_VOICE_WS_URL;
+  const defaultProtocol =
+    window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = new URL(
+    configuredUrl ?? `${defaultProtocol}//${window.location.hostname}:4000`
+  );
+  return url.toString();
+};
+
 export default function App() {
   const [
     isRecording,
@@ -182,7 +192,7 @@ export default function App() {
   useEffect(() => {
     const ws =
       new WebSocket(
-        'ws://localhost:4000'
+        socketUrl()
       );
 
     ws.binaryType =

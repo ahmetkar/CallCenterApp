@@ -8,9 +8,9 @@ services:
     ports:
       - "5500:5432"
     environment:
-      POSTGRES_DB: VoiceShop
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: ${POSTGRES_DB:-VoiceShop}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       TZ: Europe/Istanbul
     volumes:
       - postgres_data:/var/lib/postgresql/data

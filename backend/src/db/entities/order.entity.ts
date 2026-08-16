@@ -13,7 +13,7 @@ import {
 
 import { Restaurant } from './restaurant.entity';
 import { Customer } from './customer.entity';
-import { IntegrationAccount } from './integrationaccount.entity';
+
 import { OrderItem } from './orderitem.entity';
 import { Delivery } from './delivery.entity';
 import { OrderEvent } from './orderevent.entity';
@@ -55,13 +55,7 @@ export class Order {
   })
   restaurantId!: number;
 
-  @Column({
-    name: 'IntegrationAccountId',
-    type: 'int',
-    nullable: true,
-  })
-  integrationAccountId?: number;
-
+ 
   @Column({
     name: 'CustomerId',
     type: 'int',
@@ -271,18 +265,7 @@ export class Order {
   })
   restaurant!: Restaurant;
 
-  @ManyToOne(
-    () => IntegrationAccount,
-    integration => integration.orders,
-    { 
-      nullable: true,
-    }
-  )
-  @JoinColumn({
-    name: 'IntegrationAccountId',
-  })
-  integrationAccount?: IntegrationAccount;
-
+ 
   @ManyToOne(
     () => Customer,
     customer => customer.orders,

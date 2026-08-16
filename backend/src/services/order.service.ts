@@ -1,17 +1,14 @@
 
+import { randomInt, randomUUID } from 'crypto';
 import { QueryRunner } from 'typeorm';
 import { AppDataSource } from '../db/data-source';
 
-import {
-  OrderSource,
-  OrderStatus,
-} from '../db/entities/order.entity';
+import {OrderSource,OrderStatus} from '../db/entities/order.entity';
 
 import { DeliveryProvider } from '../db/entities/delivery.entity';
-import { IntegrationProvider } from '../db/entities/integrationaccount.entity';
 
 import { RestaurantRepository } from '../db/repositories/restaurant.repository';
-import { IntegrationAccountRepository } from '../db/repositories/integrationaccount.repository';
+
 import { ProductRepository } from '../db/repositories/product.repository';
 import { CustomerRepository } from '../db/repositories/customer.repository';
 import { OrderRepository } from '../db/repositories/order.repository';
@@ -19,8 +16,7 @@ import { OrderItemRepository } from '../db/repositories/orderitem.repository';
 import { DeliveryRepository } from '../db/repositories/delivery.repository';
 import { OrderEventRepository } from '../db/repositories/orderevent.repository';
 
-import { PlatformFactory } from '../integrations/platform-factory';
-import { CreatePlatformOrderDto } from '../integrations/dto/create-platform-order.dto';
+
 
 export interface CreateOrderDto {
   restaurantId: number;
@@ -42,49 +38,14 @@ export interface CreateOrderDto {
 
 export class OrderService {
   private restaurants = new RestaurantRepository();
-  private integrations = new IntegrationAccountRepository();
-  private platformFactory = new PlatformFactory();
 
   private generateOrderNumber() {
-    const now = new Date();
+   
+    const uniquePart = randomInt(100000)*100 + 10000;
 
-    const date =
-      now.getFullYear().toString() +
-      String(now.getMonth() + 1).padStart(2, '0') +
-      String(now.getDate()).padStart(2, '0');
-
-    const random = Math.floor(
-      1000 + Math.random() * 9000
-    );
-
-    return `ORD-${date}-${random}`;
+    return `${uniquePart}`;
   }
 
-  private mapToPlatformDto(
-    order: any,
-    items: any[]
-  ): CreatePlatformOrderDto {
-    return {
-      orderNumber: order.orderNumber,
-      customer: {
-        name: order.customerName,
-        phone: order.phone,
-        address: order.address,
-      },
-      items: items.map(item => ({
-        productName: item.product.name,
-        externalProductId: item.product.externalProductId,
-        quantity: item.quantity,
-        unitPrice: Number(item.product.price),
-        notes: item.notes,
-        modifiers: item.modifiers,
-      })),
-      subtotal: Number(order.subtotal),
-      deliveryFee: Number(order.deliveryFee),
-      totalPrice: Number(order.totalPrice),
-      notes: order.notes,
-    };
-  }
 
   async createOrder(dto: CreateOrderDto) {
     const queryRunner: QueryRunner =
@@ -133,10 +94,7 @@ export class OrderService {
           queryRunner.manager
         );
 
-      const integrationRepo =
-        new IntegrationAccountRepository(
-          queryRunner.manager
-        );
+     
 
       const validatedItems: Array<{
         product: any;
@@ -255,7 +213,7 @@ export class OrderService {
           notes: item.notes,
         });
 
-        // DÜZELTİLEN KISIM
+   
         item.product.stock -= item.quantity;
 
         await queryRunner.manager.save(
@@ -264,112 +222,7 @@ export class OrderService {
 
         platformItems.push(item);
       }
-      //DELIVERYHERO VE UBER EATS ENTEGRASYONLARI KULLANILABİLİR OLDUĞUNDA AÇILABİLİR.
-      /*
-      let platformResult: any = null;
-
-      if (
-        dto.provider !==
-        OrderSource.INTERNAL
-      ) {
-        const provider =
-          dto.provider ===
-          OrderSource.UBER_EATS
-            ? IntegrationProvider.UBER_EATS
-            : IntegrationProvider.DELIVERY_HERO;
-
-        const account =
-          await integrationRepo.findByProvider(
-            dto.restaurantId,
-            provider
-          );
-
-        if (!account) {
-          throw new Error(
-            `${provider} entegrasyonu bulunamadı`
-          );
-        }
-
-        const adapter =
-          this.platformFactory.getAdapter(
-            provider
-          );
-
-        platformResult =
-          await adapter.createOrder(
-            account,
-            this.mapToPlatformDto(
-              order,
-              platformItems
-            )
-          );
-
-        await orderRepo.update(
-          { id: order.id },
-          {
-            integrationAccountId:
-              account.id,
-            externalOrderId:
-              platformResult.externalOrderId,
-            externalStoreId:
-              platformResult.externalStoreId,
-            externalStatus:
-              platformResult.status,
-          }
-        );
-
-        await deliveryRepo.createDelivery({
-          orderId: order.id,
-          provider:
-            dto.provider ===
-            OrderSource.UBER_EATS
-              ? DeliveryProvider.UBER_EATS
-              : DeliveryProvider.DELIVERY_HERO,
-          externalDeliveryId:
-            platformResult.externalOrderId,
-          courierName:
-            platformResult.courier?.name,
-          courierPhone:
-            platformResult.courier?.phone,
-          trackingUrl:
-            platformResult.trackingUrl,
-          estimatedPickupTime:
-            platformResult.estimatedPickupTime,
-          estimatedDeliveryTime:
-            platformResult.estimatedDeliveryTime,
-        });
-      } else {
-        await deliveryRepo.createDelivery({
-          orderId: order.id,
-          provider:
-            DeliveryProvider.INTERNAL,
-        });
-      }
-
-      await eventRepo.createEvent({
-        orderId: order.id,
-        provider: dto.provider,
-        eventType: 'order.created',
-        payload: dto as any,
-      });
-
-      await queryRunner.commitTransaction();
-  
-      return {
-        success: true,
-        orderId: order.id,
-        orderNumber:
-          order.orderNumber,
-        provider: dto.provider,
-        externalOrderId:
-          platformResult?.externalOrderId,
-        status: OrderStatus.PENDING,
-        totalPrice: subtotal,
-        trackingUrl:
-          platformResult?.trackingUrl,
-      };
-      */
-
+    
       await deliveryRepo.createDelivery({
           orderId: order.id,
           provider:
